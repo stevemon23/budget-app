@@ -416,7 +416,7 @@ const App = (() => {
   }
 
   function buildAddExpenseHtml() {
-    const cats = ['Fixed', 'Groceries', 'Eating out', 'Hobbies', 'Gas', 'Other'];
+    const cats = Data.getCategories();
     return `
       <div class="add-header">
         <div class="add-header-title">Add expense</div>
@@ -433,8 +433,9 @@ const App = (() => {
         </div>
 
         <div class="add-step-label">Category</div>
-        <div class="cat-pills">
-          ${cats.map((c, i) => `<button class="cat-pill ${i===1?'selected':''}" onclick="App.selectCat(this)">${c}</button>`).join('')}
+        <div class="cat-pills" id="cat-pills-container">
+          ${cats.map((c, i) => `<button class="cat-pill ${i===0?'selected':''}" onclick="App.selectCat(this)">${c}</button>`).join('')}
+          <button class="cat-pill" style="border-style:dashed;" onclick="App.addCustomCategoryPrompt()">+ New</button>
         </div>
 
         <div class="add-step-label">Date</div>
@@ -457,6 +458,39 @@ const App = (() => {
         <button class="add-save-btn" onclick="App.saveExpense()">Save expense</button>
       </div>
     `;
+  }
+
+  function addCustomCategoryPrompt() {
+    const backdrop = document.createElement('div');
+    backdrop.className = 'edit-modal-backdrop';
+    backdrop.id = 'custom-cat-modal';
+    backdrop.innerHTML = `
+      <div class="edit-modal">
+        <div class="edit-modal-title">Add custom category</div>
+        <input type="text" id="custom-cat-input" placeholder="e.g. Travel, Medical, Pet..."
+          style="width:100%; background:var(--bg-card); border:0.5px solid var(--divider); border-radius:var(--radius-el); padding:12px 14px; font-size:16px; color:var(--ink); outline:none; margin-bottom:12px;" />
+        <div class="edit-modal-actions">
+          <button class="edit-modal-cancel" onclick="document.getElementById('custom-cat-modal').remove()">Cancel</button>
+          <button class="edit-modal-save" onclick="App.saveCustomCategory()">Add</button>
+        </div>
+      </div>
+    `;
+    document.getElementById('app').appendChild(backdrop);
+    setTimeout(() => backdrop.querySelector('input').focus(), 100);
+  }
+
+  function saveCustomCategory() {
+    const val = (document.getElementById('custom-cat-input').value || '').trim();
+    if (!val) return;
+    Data.addCustomCategory(val);
+    document.getElementById('custom-cat-modal').remove();
+    // Rebuild category pills with new category selected
+    const container = document.getElementById('cat-pills-container');
+    if (container) {
+      const cats = Data.getCategories();
+      container.innerHTML = cats.map(c => `<button class="cat-pill ${c===val?'selected':''}" onclick="App.selectCat(this)">${c}</button>`).join('')
+        + `<button class="cat-pill" style="border-style:dashed;" onclick="App.addCustomCategoryPrompt()">+ New</button>`;
+    }
   }
 
   function selectCat(btn) {
@@ -920,59 +954,129 @@ const App = (() => {
 
     const monthName = new Date(year, month - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
     const insights = Insights.calculate(year, month);
+    const user = Data.getUser() || {};
+    const income = parseFloat(user.income) || 0;
 
     const backdrop = document.createElement('div');
     backdrop.className = 'monthly-modal';
     backdrop.id = 'monthly-modal';
 
-    const catRows = Object.entries(summary.byCategory).map(([cat, data]) => {
-      if (data.spent === 0 && data.limit === 0) return '';
-      const diff = data.spent - data.limit;
-      const diffStr = data.limit > 0
-        ? (diff > 0 ? `<span style="color:var(--ink-red);">+${Data.formatCurrency(diff)} over</span>` : `<span style="color:var(--ink-green);">${Data.formatCurrency(Math.abs(diff))} under</span>`)
+    // Split categories into fixed vs variable
+    const fixedEntries = Object.entries(summary.byCategory).filter(([, d]) => d.isFixed);
+    const varEntries = Object.entries(summary.byCategory).filter(([, d]) => !d.isFixed && d.spent > 0);
+
+    function catRow(cat, data) {
+      const diff = data.limit > 0 ? data.spent - data.limit : null;
+      const pct = data.limit > 0 ? Math.min(100, Math.round((data.spent / data.limit) * 100)) : null;
+      const overColor = diff > 0 ? 'var(--ink-red)' : 'var(--ink-green)';
+      const diffLabel = diff !== null
+        ? (diff > 0
+          ? `<span style="font-size:11px; color:var(--ink-red);">+${Data.formatCurrency(diff)} over</span>`
+          : `<span style="font-size:11px; color:var(--ink-green);">${Data.formatCurrency(Math.abs(diff))} under</span>`)
         : '';
+      const bar = pct !== null ? `
+        <div style="height:3px; background:var(--divider); border-radius:2px; margin-top:4px;">
+          <div style="height:3px; width:${pct}%; background:${diff > 0 ? 'var(--ink-red)' : 'var(--accent)'}; border-radius:2px;"></div>
+        </div>` : '';
       return `
         <div class="monthly-cat-row">
-          <span style="color:var(--ink);">${cat}</span>
-          <div style="display:flex; align-items:center; gap:8px;">
-            <span style="font-weight:500; color:var(--ink);">${Data.formatCurrency(data.spent)}</span>
-            ${diffStr}
+          <div style="flex:1;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="color:var(--ink); font-size:14px;">${cat}</span>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-weight:500; color:var(--ink); font-size:14px;">${Data.formatCurrency(data.spent)}</span>
+                ${data.limit > 0 ? `<span style="font-size:11px; color:var(--ink-muted);">of ${Data.formatCurrency(data.limit)}</span>` : ''}
+              </div>
+            </div>
+            ${diffLabel}
+            ${bar}
           </div>
         </div>
       `;
-    }).join('');
+    }
+
+    const fixedRows = fixedEntries.map(([cat, data]) => catRow(cat, data)).join('');
+    const varRows = varEntries.map(([cat, data]) => catRow(cat, data)).join('');
+
+    const surplusPositive = summary.surplus > 0;
 
     backdrop.innerHTML = `
       <div class="monthly-sheet">
         <div class="monthly-handle"></div>
-        <div style="font-size:20px; font-weight:500; color:var(--ink); margin-bottom:4px;">${monthName} wrap-up</div>
-        <div style="font-size:13px; color:var(--ink-muted); margin-bottom:16px;">Here's how your month looked</div>
 
-        <div class="monthly-stat-grid">
+        <div style="font-size:22px; font-weight:500; color:var(--ink); margin-bottom:2px;">${monthName}</div>
+        <div style="font-size:13px; color:var(--ink-muted); margin-bottom:20px;">Monthly wrap-up</div>
+
+        <!-- Top stats -->
+        <div class="monthly-stat-grid" style="margin-bottom:20px;">
           <div class="monthly-stat">
             <div class="monthly-stat-label">Total spent</div>
             <div class="monthly-stat-val">${Data.formatCurrency(summary.total)}</div>
+            <div style="font-size:11px; color:var(--ink-muted); margin-top:2px;">of ${Data.formatCurrency(income)} income</div>
           </div>
           <div class="monthly-stat">
-            <div class="monthly-stat-label">${summary.surplus > 0 ? 'Surplus' : 'Over budget'}</div>
-            <div class="monthly-stat-val" style="color:${summary.surplus > 0 ? 'var(--ink-green)' : 'var(--ink-red)'};">${Data.formatCurrency(summary.surplus)}</div>
+            <div class="monthly-stat-label">${surplusPositive ? 'Surplus' : 'Over budget'}</div>
+            <div class="monthly-stat-val" style="color:${surplusPositive ? 'var(--ink-green)' : 'var(--ink-red)'};">${Data.formatCurrency(Math.abs(summary.surplus))}</div>
+            <div style="font-size:11px; color:var(--ink-muted); margin-top:2px;">${surplusPositive ? 'left over' : 'over income'}</div>
           </div>
         </div>
 
-        <div style="margin-bottom:4px; font-size:11px; color:var(--ink-muted); text-transform:uppercase; letter-spacing:0.06em;">By category</div>
-        <div style="background:var(--bg-card); border-radius:var(--radius-card); padding:4px 16px; margin-bottom:16px;">${catRows}</div>
-
-        <div style="margin-bottom:8px; font-size:11px; color:var(--ink-muted); text-transform:uppercase; letter-spacing:0.06em;">Top insights</div>
-        <div style="background:var(--bg-card); border-radius:var(--radius-card); padding:10px 16px; margin-bottom:16px; font-size:13px; color:var(--ink); line-height:1.8;">
-          🛒 ${insights.grocery.count} grocery trips · avg ${Data.formatCurrency(insights.grocery.avgSpend)}/trip<br/>
-          🍽 ${insights.eatingOut.count} eating out · ${Data.formatCurrency(insights.eatingOut.total)} total<br/>
-          ${insights.hobbies.topHobby ? `🏌️ Top hobby: ${insights.hobbies.topHobby.name} · ${Data.formatCurrency(insights.hobbies.topHobby.amount)}` : `⛽ ${insights.gas.count} gas fill-ups`}
+        <!-- Overall progress bar -->
+        <div style="margin-bottom:20px;">
+          <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--ink-muted); margin-bottom:4px;">
+            <span>Budget used</span>
+            <span>${income > 0 ? Math.round((summary.total/income)*100) : 0}%</span>
+          </div>
+          <div style="height:6px; background:var(--divider); border-radius:4px;">
+            <div style="height:6px; width:${income > 0 ? Math.min(100,Math.round((summary.total/income)*100)) : 0}%; background:${surplusPositive ? 'var(--accent)' : 'var(--ink-red)'}; border-radius:4px;"></div>
+          </div>
         </div>
 
-        <div class="invest-card" style="margin: 0 0 16px;">
-          <div class="invest-label">Investment opportunity</div>
-          <div class="invest-range">${Data.formatCurrency(summary.investLow)} – ${Data.formatCurrency(summary.investHigh)}</div>
-          <div class="invest-note">Based on this month, you could comfortably put this away in investments if you want.</div>
+        <!-- Fixed costs -->
+        ${fixedRows ? `
+          <div style="font-size:11px; color:var(--ink-muted); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">Fixed costs</div>
+          <div style="background:var(--bg-card); border-radius:var(--radius-card); padding:4px 16px; margin-bottom:16px;">
+            ${fixedRows}
+            <div style="display:flex; justify-content:space-between; padding:8px 0 4px; border-top:0.5px solid var(--divider); margin-top:4px;">
+              <span style="font-size:12px; color:var(--ink-muted);">Fixed total</span>
+              <span style="font-size:12px; font-weight:500; color:var(--ink);">${Data.formatCurrency(summary.fixedTotal)}</span>
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- Variable spending -->
+        ${varRows ? `
+          <div style="font-size:11px; color:var(--ink-muted); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">Variable spending</div>
+          <div style="background:var(--bg-card); border-radius:var(--radius-card); padding:4px 16px; margin-bottom:16px;">${varRows}</div>
+        ` : ''}
+
+        <!-- Habit highlights -->
+        <div style="font-size:11px; color:var(--ink-muted); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">Habit highlights</div>
+        <div style="background:var(--bg-card); border-radius:var(--radius-card); padding:10px 16px; margin-bottom:16px;">
+          <div style="display:flex; justify-content:space-between; padding:5px 0; border-bottom:0.5px solid var(--divider); font-size:13px;">
+            <span style="color:var(--ink-muted);">🛒 Grocery trips</span>
+            <span style="color:var(--ink); font-weight:500;">${insights.grocery.count} trips · avg ${Data.formatCurrency(insights.grocery.avgSpend)}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; padding:5px 0; border-bottom:0.5px solid var(--divider); font-size:13px;">
+            <span style="color:var(--ink-muted);">🍽 Eating out</span>
+            <span style="color:var(--ink); font-weight:500;">${insights.eatingOut.count}x · ${Data.formatCurrency(insights.eatingOut.total)}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; padding:5px 0; border-bottom:0.5px solid var(--divider); font-size:13px;">
+            <span style="color:var(--ink-muted);">⛽ Gas fill-ups</span>
+            <span style="color:var(--ink); font-weight:500;">${insights.gas.count} fills · ${Data.formatCurrency(insights.gas.total)}</span>
+          </div>
+          ${insights.hobbies.topHobby ? `
+          <div style="display:flex; justify-content:space-between; padding:5px 0; font-size:13px;">
+            <span style="color:var(--ink-muted);">🎯 Top hobby</span>
+            <span style="color:var(--ink); font-weight:500;">${insights.hobbies.topHobby.name} · ${Data.formatCurrency(insights.hobbies.topHobby.amount)}</span>
+          </div>` : ''}
+        </div>
+
+        <!-- Investment suggestion -->
+        <div style="background:var(--bg-card); border-radius:var(--radius-card); padding:16px; margin-bottom:20px; border-left:3px solid var(--accent); border-top-left-radius:0; border-bottom-left-radius:0;">
+          <div style="font-size:12px; color:var(--ink-muted); margin-bottom:4px; text-transform:uppercase; letter-spacing:0.05em;">Investment opportunity</div>
+          <div style="font-size:26px; font-weight:500; color:var(--accent); margin:6px 0;">${Data.formatCurrency(summary.investLow)} – ${Data.formatCurrency(summary.investHigh)}</div>
+          <div style="font-size:12px; color:var(--ink-muted); line-height:1.5;">You could comfortably put this away in investments this month if you want. Based on ${surplusPositive ? 'your ' + Data.formatCurrency(summary.surplus) + ' surplus' : 'this month\'s spend'}.</div>
         </div>
 
         <div class="monthly-actions">
@@ -1020,6 +1124,7 @@ const App = (() => {
     toggleExpenseExpand,
     openAddExpense, closeAddExpense,
     selectCat, addSubItem, removeSubItem, saveExpense,
+    addCustomCategoryPrompt, saveCustomCategory,
     renderInsights, setInsightsMonth,
     renderGoals, editSavingsBalance, saveSavingsBalance,
     editSetting, saveSettingEdit, editCatLimit, saveCatLimit,

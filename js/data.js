@@ -30,6 +30,48 @@ const Data = (() => {
     return u && u.onboardingComplete === true;
   }
 
+  /* ---- CATEGORIES ---- */
+  // Returns the full dynamic category list:
+  // fixed cost line items + default spending cats + custom cats
+  function getCategories() {
+    const user = getUser();
+    if (!user) return getDefaultCategories();
+
+    // Fixed cost names become their own categories
+    const fixedNames = (user.fixedCosts || []).map(f => f.name);
+
+    // Default spending categories (never removed)
+    const defaults = ['Groceries', 'Eating out', 'Hobbies', 'Gas', 'Other'];
+
+    // User-added custom categories
+    const custom = user.customCategories || [];
+
+    // Merge: fixed first, then defaults, then custom — no duplicates
+    const all = [...fixedNames, ...defaults, ...custom];
+    return [...new Set(all)];
+  }
+
+  function getDefaultCategories() {
+    return ['Groceries', 'Eating out', 'Hobbies', 'Gas', 'Other'];
+  }
+
+  function addCustomCategory(name) {
+    const user = getUser();
+    if (!user) return;
+    const custom = user.customCategories || [];
+    if (!custom.includes(name)) {
+      custom.push(name);
+      saveUser({ customCategories: custom });
+    }
+  }
+
+  function removeCustomCategory(name) {
+    const user = getUser();
+    if (!user) return;
+    const custom = (user.customCategories || []).filter(c => c !== name);
+    saveUser({ customCategories: custom });
+  }
+
   /* ---- EXPENSES ---- */
   function getAllExpenses() {
     try {
@@ -95,25 +137,31 @@ const Data = (() => {
 
     const expenses = getExpensesByMonth(year, month);
     const total = expenses.reduce((s, e) => s + e.amount, 0);
-    const categories = ['Fixed', 'Groceries', 'Eating out', 'Hobbies', 'Gas', 'Other'];
+    const categories = getCategories();
     const limits = user.categoryLimits || {};
     const income = parseFloat(user.income) || 0;
+    const fixedCosts = user.fixedCosts || [];
+    const fixedTotal = fixedCosts.reduce((s, f) => s + (parseFloat(f.amount) || 0), 0);
 
     const byCategory = {};
     categories.forEach(cat => {
-      byCategory[cat] = {
-        spent: getCategoryTotal(year, month, cat),
-        limit: parseFloat(limits[cat]) || 0
-      };
+      const isFixed = fixedCosts.some(f => f.name === cat);
+      const budgeted = isFixed
+        ? parseFloat((fixedCosts.find(f => f.name === cat) || {}).amount) || 0
+        : parseFloat(limits[cat]) || 0;
+      const spent = getCategoryTotal(year, month, cat);
+      if (spent > 0 || budgeted > 0) {
+        byCategory[cat] = { spent, limit: budgeted, isFixed };
+      }
     });
 
-    const fixedTotal = (user.fixedCosts || []).reduce((s, f) => s + (parseFloat(f.amount) || 0), 0);
-    const totalBudget = income;
     const surplus = income - total;
 
     return {
-      year, month, total, totalBudget,
-      surplus: Math.max(0, surplus),
+      year, month, total,
+      totalBudget: income,
+      fixedTotal,
+      surplus,
       byCategory,
       expenseCount: expenses.length,
       investLow: Math.round(Math.max(0, surplus) * 0.5),
@@ -126,7 +174,6 @@ const Data = (() => {
     const cache = getInsightsCache();
     const user = getUser();
     if (!user) return 0;
-
     if (cache && cache.dataMonthsCount >= 3 && cache.monthlyAverageSpend > 0) {
       return Math.round(cache.monthlyAverageSpend * 12);
     }
@@ -217,6 +264,7 @@ const Data = (() => {
 
   return {
     getUser, saveUser, isOnboardingComplete,
+    getCategories, getDefaultCategories, addCustomCategory, removeCustomCategory,
     getAllExpenses, saveExpense, deleteExpense,
     getExpensesByDate, getExpensesByMonth,
     getMonthlyTotal, getCategoryTotal, getDailyTotal,
