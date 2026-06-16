@@ -1,15 +1,15 @@
-const CACHE_NAME = 'ledger-v1';
+const CACHE_NAME = 'ledger-v2';
 const ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/css/theme.css',
-  '/js/data.js',
-  '/js/insights.js',
-  '/js/onboarding.js',
-  '/js/app.js',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png'
+  '/budget-app/',
+  '/budget-app/index.html',
+  '/budget-app/manifest.json',
+  '/budget-app/css/theme.css',
+  '/budget-app/js/data.js',
+  '/budget-app/js/insights.js',
+  '/budget-app/js/onboarding.js',
+  '/budget-app/js/app.js',
+  '/budget-app/icons/icon-192.png',
+  '/budget-app/icons/icon-512.png'
 ];
 
 self.addEventListener('install', e => {
