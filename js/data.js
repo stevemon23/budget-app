@@ -1,14 +1,10 @@
-/* ============================================================
-   data.js — All localStorage operations for Ledger
-   ============================================================ */
-
 const Data = (() => {
-
   const KEYS = {
     USER: 'budget_user',
     EXPENSES: 'budget_expenses',
     INSIGHTS_CACHE: 'budget_insights_cache',
-    MONTHLY_DISMISSED: 'budget_monthly_dismissed'
+    MONTHLY_DISMISSED: 'budget_monthly_dismissed',
+    LOANS: 'budget_loans'
   };
 
   function getUser() {
@@ -54,6 +50,63 @@ const Data = (() => {
     saveUser({ customCategories: custom });
   }
 
+  function getLoans() {
+    try { return JSON.parse(localStorage.getItem(KEYS.LOANS)) || []; }
+    catch { return []; }
+  }
+
+  function saveLoan(loan) {
+    const loans = getLoans();
+    const newLoan = {
+      id: 'loan_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+      name: loan.name || '',
+      totalAmount: parseFloat(loan.totalAmount) || 0,
+      remainingBalance: parseFloat(loan.remainingBalance) || 0,
+      monthlyPayment: parseFloat(loan.monthlyPayment) || 0,
+      interestRate: parseFloat(loan.interestRate) || 0,
+      startDate: loan.startDate || getTodayStr(),
+      payments: [],
+      createdAt: new Date().toISOString()
+    };
+    loans.push(newLoan);
+    localStorage.setItem(KEYS.LOANS, JSON.stringify(loans));
+    return newLoan;
+  }
+
+  function updateLoan(id, updates) {
+    const loans = getLoans().map(l => l.id === id ? { ...l, ...updates } : l);
+    localStorage.setItem(KEYS.LOANS, JSON.stringify(loans));
+  }
+
+  function deleteLoan(id) {
+    const loans = getLoans().filter(l => l.id !== id);
+    localStorage.setItem(KEYS.LOANS, JSON.stringify(loans));
+  }
+
+  function recordLoanPayment(loanId, amount) {
+    const loans = getLoans();
+    const loan = loans.find(l => l.id === loanId);
+    if (!loan) return;
+    const payment = {
+      id: 'pay_' + Date.now(),
+      amount: parseFloat(amount) || 0,
+      date: getTodayStr(),
+      balanceAfter: Math.max(0, loan.remainingBalance - (parseFloat(amount) || 0))
+    };
+    loan.payments = loan.payments || [];
+    loan.payments.push(payment);
+    loan.remainingBalance = payment.balanceAfter;
+    localStorage.setItem(KEYS.LOANS, JSON.stringify(loans));
+  }
+
+  function getLoanStats(loan) {
+    const paid = loan.totalAmount - loan.remainingBalance;
+    const pct = loan.totalAmount > 0 ? Math.round((paid / loan.totalAmount) * 100) : 0;
+    const monthsLeft = loan.monthlyPayment > 0 && loan.remainingBalance > 0
+      ? Math.ceil(loan.remainingBalance / loan.monthlyPayment) : 0;
+    return { paid, pct, monthsLeft };
+  }
+
   function getAllExpenses() {
     try { return JSON.parse(localStorage.getItem(KEYS.EXPENSES)) || []; }
     catch { return []; }
@@ -62,7 +115,7 @@ const Data = (() => {
   function saveExpense(expense) {
     const expenses = getAllExpenses();
     const newExpense = {
-      id: 'exp_' + Date.now() + '_' + Math.random().toString(36).substr(2,5),
+      id: 'exp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
       date: expense.date || getTodayStr(),
       subject: expense.subject || '',
       category: expense.category || 'Other',
@@ -86,13 +139,12 @@ const Data = (() => {
   }
 
   function getExpensesByMonth(year, month) {
-    const prefix = `${year}-${String(month).padStart(2,'0')}`;
+    const prefix = year + '-' + String(month).padStart(2, '0');
     return getAllExpenses().filter(e => e.date && e.date.startsWith(prefix));
   }
 
   function getMonthlyTotal(year, month) {
-    return getExpensesByMonth(year, month)
-      .reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
+    return getExpensesByMonth(year, month).reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
   }
 
   function getCategoryTotal(year, month, category) {
@@ -102,8 +154,7 @@ const Data = (() => {
   }
 
   function getDailyTotal(dateStr) {
-    return getExpensesByDate(dateStr)
-      .reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
+    return getExpensesByDate(dateStr).reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
   }
 
   function hasExpensesOnDate(dateStr) {
@@ -120,7 +171,6 @@ const Data = (() => {
     const fixedTotal = fixedCosts.reduce((s, f) => s + (parseFloat(f.amount) || 0), 0);
     const limits = user.categoryLimits || {};
     const categories = getCategories();
-
     const byCategory = {};
     categories.forEach(cat => {
       const isFixed = fixedCosts.some(f => f.name === cat);
@@ -132,7 +182,6 @@ const Data = (() => {
         byCategory[cat] = { spent, limit: budgeted, isFixed };
       }
     });
-
     const surplus = income - total;
     return {
       year, month, total, totalBudget: income, fixedTotal, surplus,
@@ -171,21 +220,21 @@ const Data = (() => {
   function isMonthlyDismissed(year, month) {
     try {
       const d = JSON.parse(localStorage.getItem(KEYS.MONTHLY_DISMISSED)) || [];
-      return d.includes(`${year}-${month}`);
+      return d.includes(year + '-' + month);
     } catch { return false; }
   }
 
   function dismissMonthly(year, month) {
     try {
       const d = JSON.parse(localStorage.getItem(KEYS.MONTHLY_DISMISSED)) || [];
-      d.push(`${year}-${month}`);
+      d.push(year + '-' + month);
       localStorage.setItem(KEYS.MONTHLY_DISMISSED, JSON.stringify(d));
     } catch {}
   }
 
   function getTodayStr() {
     const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
 
   function formatCurrency(amount) {
@@ -201,12 +250,14 @@ const Data = (() => {
     localStorage.removeItem(KEYS.EXPENSES);
     localStorage.removeItem(KEYS.INSIGHTS_CACHE);
     localStorage.removeItem(KEYS.MONTHLY_DISMISSED);
+    localStorage.removeItem(KEYS.LOANS);
   }
 
   function exportAllData() {
     return {
       user: getUser(),
       expenses: getAllExpenses(),
+      loans: getLoans(),
       insightsCache: getInsightsCache(),
       exportedAt: new Date().toISOString()
     };
@@ -230,6 +281,7 @@ const Data = (() => {
   return {
     getUser, saveUser, isOnboardingComplete,
     getCategories, addCustomCategory, removeCustomCategory,
+    getLoans, saveLoan, updateLoan, deleteLoan, recordLoanPayment, getLoanStats,
     getAllExpenses, saveExpense, deleteExpense,
     getExpensesByDate, getExpensesByMonth,
     getMonthlyTotal, getCategoryTotal, getDailyTotal,

@@ -13,31 +13,22 @@
   <title>Ledger</title>
 </head>
 <body>
-
-  <!-- APP SHELL -->
   <div id="app">
-
-    <!-- ONBOARDING -->
     <div id="onboarding" class="hidden">
       <div class="ob-progress-bar">
         <div class="ob-progress-fill" id="ob-progress-fill"></div>
       </div>
       <div id="ob-screens"></div>
     </div>
-
-    <!-- MAIN APP -->
     <div id="main-app" class="hidden">
-
-      <!-- SCREENS -->
       <div id="screen-home" class="screen"></div>
       <div id="screen-day" class="screen hidden"></div>
       <div id="screen-add" class="screen hidden"></div>
       <div id="screen-insights" class="screen hidden"></div>
       <div id="screen-goals" class="screen hidden"></div>
+      <div id="screen-loans" class="screen hidden"></div>
       <div id="screen-settings" class="screen hidden"></div>
       <div id="screen-monthly" class="screen hidden"></div>
-
-      <!-- BOTTOM NAV -->
       <nav id="bottom-nav">
         <button class="nav-btn active" data-screen="home" onclick="App.navigate('home')">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
@@ -52,27 +43,25 @@
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </div>
         </button>
+        <button class="nav-btn" data-screen="loans" onclick="App.navigate('loans')">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+          <span>Loans</span>
+        </button>
         <button class="nav-btn" data-screen="goals" onclick="App.navigate('goals')">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
           <span>Goals</span>
         </button>
-        <button class="nav-btn" data-screen="settings" onclick="App.navigate('settings')">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-          <span>Settings</span>
-        </button>
       </nav>
     </div>
-
   </div>
-
   <script src="js/data.js"></script>
   <script src="js/insights.js"></script>
   <script src="js/onboarding.js"></script>
   <script src="js/app.js"></script>
   <script>
-  if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/budget-app/sw.js').catch(console.error);
-}
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/budget-app/sw.js').catch(console.error);
+    }
   </script>
 </body>
 </html>
