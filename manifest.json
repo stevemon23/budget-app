@@ -2,7 +2,7 @@
   "name": "Ledger",
   "short_name": "Ledger",
   "description": "Your personal budget, built like a calendar.",
-  "start_url": "/index.html",
+  "start_url": "/budget-app/index.html",
   "display": "standalone",
   "background_color": "#F5F0E8",
   "theme_color": "#A0826D",
