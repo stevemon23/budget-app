@@ -11,11 +11,9 @@ const Data = (() => {
     MONTHLY_DISMISSED: 'budget_monthly_dismissed'
   };
 
-  /* ---- USER ---- */
   function getUser() {
-    try {
-      return JSON.parse(localStorage.getItem(KEYS.USER)) || null;
-    } catch { return null; }
+    try { return JSON.parse(localStorage.getItem(KEYS.USER)) || null; }
+    catch { return null; }
   }
 
   function saveUser(data) {
@@ -30,29 +28,13 @@ const Data = (() => {
     return u && u.onboardingComplete === true;
   }
 
-  /* ---- CATEGORIES ---- */
-  // Returns the full dynamic category list:
-  // fixed cost line items + default spending cats + custom cats
   function getCategories() {
     const user = getUser();
-    if (!user) return getDefaultCategories();
-
-    // Fixed cost names become their own categories
-    const fixedNames = (user.fixedCosts || []).map(f => f.name);
-
-    // Default spending categories (never removed)
     const defaults = ['Groceries', 'Eating out', 'Hobbies', 'Gas', 'Other'];
-
-    // User-added custom categories
+    if (!user) return defaults;
+    const fixedNames = (user.fixedCosts || []).map(f => f.name);
     const custom = user.customCategories || [];
-
-    // Merge: fixed first, then defaults, then custom — no duplicates
-    const all = [...fixedNames, ...defaults, ...custom];
-    return [...new Set(all)];
-  }
-
-  function getDefaultCategories() {
-    return ['Groceries', 'Eating out', 'Hobbies', 'Gas', 'Other'];
+    return [...new Set([...fixedNames, ...defaults, ...custom])];
   }
 
   function addCustomCategory(name) {
@@ -72,11 +54,9 @@ const Data = (() => {
     saveUser({ customCategories: custom });
   }
 
-  /* ---- EXPENSES ---- */
   function getAllExpenses() {
-    try {
-      return JSON.parse(localStorage.getItem(KEYS.EXPENSES)) || [];
-    } catch { return []; }
+    try { return JSON.parse(localStorage.getItem(KEYS.EXPENSES)) || []; }
+    catch { return []; }
   }
 
   function saveExpense(expense) {
@@ -130,18 +110,16 @@ const Data = (() => {
     return getAllExpenses().some(e => e.date === dateStr);
   }
 
-  /* ---- MONTHLY SUMMARY ---- */
   function getMonthlySummary(year, month) {
     const user = getUser();
     if (!user) return null;
-
     const expenses = getExpensesByMonth(year, month);
     const total = expenses.reduce((s, e) => s + e.amount, 0);
-    const categories = getCategories();
-    const limits = user.categoryLimits || {};
     const income = parseFloat(user.income) || 0;
     const fixedCosts = user.fixedCosts || [];
     const fixedTotal = fixedCosts.reduce((s, f) => s + (parseFloat(f.amount) || 0), 0);
+    const limits = user.categoryLimits || {};
+    const categories = getCategories();
 
     const byCategory = {};
     categories.forEach(cat => {
@@ -156,20 +134,14 @@ const Data = (() => {
     });
 
     const surplus = income - total;
-
     return {
-      year, month, total,
-      totalBudget: income,
-      fixedTotal,
-      surplus,
-      byCategory,
-      expenseCount: expenses.length,
+      year, month, total, totalBudget: income, fixedTotal, surplus,
+      byCategory, expenseCount: expenses.length,
       investLow: Math.round(Math.max(0, surplus) * 0.5),
       investHigh: Math.round(Math.max(0, surplus))
     };
   }
 
-  /* ---- SAVINGS & GOALS ---- */
   function getSavingsTarget() {
     const cache = getInsightsCache();
     const user = getUser();
@@ -177,8 +149,7 @@ const Data = (() => {
     if (cache && cache.dataMonthsCount >= 3 && cache.monthlyAverageSpend > 0) {
       return Math.round(cache.monthlyAverageSpend * 12);
     }
-    const estimate = parseFloat(user.savingsGoalEstimate) || 0;
-    return Math.round(estimate * 12);
+    return Math.round((parseFloat(user.savingsGoalEstimate) || 0) * 12);
   }
 
   function getInvestmentSuggestion() {
@@ -188,18 +159,15 @@ const Data = (() => {
     return { low: summary.investLow, high: summary.investHigh };
   }
 
-  /* ---- INSIGHTS CACHE ---- */
   function getInsightsCache() {
-    try {
-      return JSON.parse(localStorage.getItem(KEYS.INSIGHTS_CACHE)) || null;
-    } catch { return null; }
+    try { return JSON.parse(localStorage.getItem(KEYS.INSIGHTS_CACHE)) || null; }
+    catch { return null; }
   }
 
   function saveInsightsCache(data) {
     localStorage.setItem(KEYS.INSIGHTS_CACHE, JSON.stringify({ ...data, lastUpdated: new Date().toISOString() }));
   }
 
-  /* ---- MONTHLY WRAP DISMISSED ---- */
   function isMonthlyDismissed(year, month) {
     try {
       const d = JSON.parse(localStorage.getItem(KEYS.MONTHLY_DISMISSED)) || [];
@@ -215,7 +183,6 @@ const Data = (() => {
     } catch {}
   }
 
-  /* ---- UTILS ---- */
   function getTodayStr() {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -248,9 +215,7 @@ const Data = (() => {
   function getMonthsWithData() {
     const expenses = getAllExpenses();
     const months = new Set();
-    expenses.forEach(e => {
-      if (e.date) months.add(e.date.substr(0, 7));
-    });
+    expenses.forEach(e => { if (e.date) months.add(e.date.substr(0, 7)); });
     return Array.from(months).sort().reverse();
   }
 
@@ -264,7 +229,7 @@ const Data = (() => {
 
   return {
     getUser, saveUser, isOnboardingComplete,
-    getCategories, getDefaultCategories, addCustomCategory, removeCustomCategory,
+    getCategories, addCustomCategory, removeCustomCategory,
     getAllExpenses, saveExpense, deleteExpense,
     getExpensesByDate, getExpensesByMonth,
     getMonthlyTotal, getCategoryTotal, getDailyTotal,

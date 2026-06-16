@@ -5,13 +5,13 @@
 const App = (() => {
 
   let currentScreen = 'home';
-  let calendarView = 'week'; // 'day' | 'week' | 'month'
-  let calendarDate = new Date(); // reference date for calendar navigation
+  let calendarView = 'week';
+  let calendarDate = new Date();
   let selectedDayDate = null;
   let addExpenseDate = null;
   let addSubItems = [];
   let expandedExpenseId = null;
-  let insightsMonth = null; // { year, month }
+  let insightsMonth = null;
 
   /* ===== BOOT ===== */
   function boot() {
@@ -72,7 +72,6 @@ const App = (() => {
     const income = parseFloat(user.income) || 0;
     const remaining = Math.max(0, income - totalSpent);
     const pct = income > 0 ? Math.min(100, Math.round((totalSpent / income) * 100)) : 0;
-
     const monthName = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
     const recentExpenses = Data.getAllExpenses()
@@ -126,10 +125,7 @@ const App = (() => {
   }
 
   function renderWeekCal() {
-    const today = new Date();
     const todayStr = Data.getTodayStr();
-
-    // Get Mon of calendarDate's week
     const ref = new Date(calendarDate);
     const dow = ref.getDay();
     const mon = new Date(ref);
@@ -145,7 +141,7 @@ const App = (() => {
     const weekLabel = formatWeekLabel(days[0], days[6]);
     const headers = ['M','T','W','T','F','S','S'];
 
-    const cells = days.map((d, i) => {
+    const cells = days.map(d => {
       const ds = dateToStr(d);
       const isToday = ds === todayStr;
       const hasSpend = Data.hasExpensesOnDate(ds);
@@ -182,12 +178,10 @@ const App = (() => {
     const offset = startDow === 0 ? 6 : startDow - 1;
 
     let cells = '';
-    // Empty cells before
     for (let i = 0; i < offset; i++) {
       const prevDate = new Date(year, month, 1 - (offset - i));
       cells += `<div class="cal-month-cell other-month"><div class="cal-day-num">${prevDate.getDate()}</div></div>`;
     }
-    // Days
     for (let d = 1; d <= lastDay.getDate(); d++) {
       const ds = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
       const isToday = ds === todayStr;
@@ -241,13 +235,9 @@ const App = (() => {
   }
 
   function calNav(dir) {
-    if (calendarView === 'week') {
-      calendarDate.setDate(calendarDate.getDate() + dir * 7);
-    } else if (calendarView === 'month') {
-      calendarDate.setMonth(calendarDate.getMonth() + dir);
-    } else {
-      calendarDate.setDate(calendarDate.getDate() + dir);
-    }
+    if (calendarView === 'week') calendarDate.setDate(calendarDate.getDate() + dir * 7);
+    else if (calendarView === 'month') calendarDate.setMonth(calendarDate.getMonth() + dir);
+    else calendarDate.setDate(calendarDate.getDate() + dir);
     renderCalendarBody();
   }
 
@@ -270,17 +260,21 @@ const App = (() => {
     const diff = dayTotal - dailyAvg;
     const diffStr = diff > 0
       ? `+${Data.formatCurrency(diff)} over avg`
-      : diff < 0
-        ? `${Data.formatCurrency(Math.abs(diff))} under avg`
-        : 'Right at your avg';
+      : diff < 0 ? `${Data.formatCurrency(Math.abs(diff))} under avg`
+      : 'Right at your avg';
     const diffColor = diff > 0 ? 'var(--ink-red)' : diff < 0 ? 'var(--ink-green)' : 'var(--ink-muted)';
 
-    const cats = ['Fixed','Groceries','Eating out','Hobbies','Gas','Other'];
+    const categories = Data.getCategories();
     const limits = user.categoryLimits || {};
-    const catBreakdown = cats.map(cat => {
+    const fixedCosts = user.fixedCosts || [];
+
+    const catBreakdown = categories.map(cat => {
       const spent = expenses.filter(e => e.category === cat).reduce((s,e) => s + e.amount, 0);
       if (spent === 0) return '';
-      const limit = parseFloat(limits[cat]) || 0;
+      const isFixed = fixedCosts.some(f => f.name === cat);
+      const limit = isFixed
+        ? parseFloat((fixedCosts.find(f => f.name === cat)||{}).amount) || 0
+        : parseFloat(limits[cat]) || 0;
       const pct = limit > 0 ? Math.min(100, Math.round((spent/limit)*100)) : 100;
       return `
         <div style="margin-bottom:10px;">
@@ -362,11 +356,7 @@ const App = (() => {
         </div>
       `;
     } else if (isExpanded && e.note) {
-      subHtml = `
-        <div class="expense-expand">
-          <div style="font-size:13px; color:var(--ink-muted);">${e.note}</div>
-        </div>
-      `;
+      subHtml = `<div class="expense-expand"><div style="font-size:13px; color:var(--ink-muted);">${e.note}</div></div>`;
     }
 
     const tapAction = expandable && (hasSubItems || e.note)
@@ -402,9 +392,7 @@ const App = (() => {
     }
 
     addEl.innerHTML = buildAddExpenseHtml();
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => addEl.classList.add('open'));
-    });
+    requestAnimationFrame(() => requestAnimationFrame(() => addEl.classList.add('open')));
   }
 
   function closeAddExpense() {
@@ -484,7 +472,6 @@ const App = (() => {
     if (!val) return;
     Data.addCustomCategory(val);
     document.getElementById('custom-cat-modal').remove();
-    // Rebuild category pills with new category selected
     const container = document.getElementById('cat-pills-container');
     if (container) {
       const cats = Data.getCategories();
@@ -531,7 +518,7 @@ const App = (() => {
     const subject = (document.getElementById('add-subject').value || '').trim();
     const amount = parseFloat(document.getElementById('add-amount').value) || 0;
     const catEl = document.querySelector('#add-expense-overlay .cat-pill.selected');
-    const category = catEl ? catEl.textContent : 'Other';
+    const category = catEl ? catEl.textContent.trim() : 'Other';
     const date = document.getElementById('add-date').value || Data.getTodayStr();
     const note = document.getElementById('add-note').value.trim();
 
@@ -556,7 +543,6 @@ const App = (() => {
     const month = insightsMonth || { year: now.getFullYear(), month: now.getMonth() + 1 };
     const data = Insights.calculate(month.year, month.month);
     const monthsWithData = Data.getMonthsWithData();
-
     const monthLabel = new Date(month.year, month.month - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
     const monthOptions = monthsWithData.map(ym => {
@@ -667,24 +653,22 @@ const App = (() => {
     const gap = Math.max(0, savingsTarget - savingsBalance);
     const cache = Data.getInsightsCache();
     const monthsCount = cache ? cache.dataMonthsCount || 0 : 0;
-
     const income = parseFloat(user.income) || 0;
     const now = new Date();
     const monthTotal = Data.getMonthlyTotal(now.getFullYear(), now.getMonth() + 1);
     const surplus = Math.max(0, income - monthTotal);
-
-    // Estimate months to goal
-    const monthsSaved = monthsCount >= 1 ? cache.monthlyAverageSpend || 0 : 0;
     const monthlySurplusEstimate = income - (savingsTarget / 12);
-    const monthsToGoal = monthlySurplusEstimate > 0 && gap > 0
-      ? Math.ceil(gap / monthlySurplusEstimate)
-      : null;
+    const monthsToGoal = monthlySurplusEstimate > 0 && gap > 0 ? Math.ceil(gap / monthlySurplusEstimate) : null;
 
-    const cats = ['Groceries', 'Eating out', 'Hobbies', 'Gas', 'Other'];
+    const categories = Data.getCategories();
     const limits = user.categoryLimits || {};
+    const fixedCosts = user.fixedCosts || [];
 
-    const healthRows = cats.map(cat => {
-      const limit = parseFloat(limits[cat]) || 0;
+    const healthRows = categories.map(cat => {
+      const isFixed = fixedCosts.some(f => f.name === cat);
+      const limit = isFixed
+        ? parseFloat((fixedCosts.find(f => f.name === cat)||{}).amount) || 0
+        : parseFloat(limits[cat]) || 0;
       if (limit === 0) return '';
       const spent = Data.getCategoryTotal(now.getFullYear(), now.getMonth() + 1, cat);
       const pct = Math.round((spent / limit) * 100);
@@ -732,7 +716,7 @@ const App = (() => {
       <div class="invest-card">
         <div class="invest-label">Based on this month</div>
         <div class="invest-range">${Data.formatCurrency(surplus * 0.5)} – ${Data.formatCurrency(surplus)}</div>
-        <div class="invest-note">You could comfortably put this away in investments this month if you want. Conservative = 50% of surplus, full = 100%.</div>
+        <div class="invest-note">You could comfortably put this away in investments this month if you want.</div>
       </div>
     `;
   }
@@ -740,7 +724,6 @@ const App = (() => {
   function editSavingsBalance() {
     const user = Data.getUser() || {};
     const current = parseFloat(user.savingsBalance) || 0;
-
     const backdrop = document.createElement('div');
     backdrop.className = 'edit-modal-backdrop';
     backdrop.innerHTML = `
@@ -778,6 +761,9 @@ const App = (() => {
     const el = document.getElementById('screen-settings');
     const user = Data.getUser() || {};
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const categories = Data.getCategories();
+    const fixedCosts = user.fixedCosts || [];
+    const limits = user.categoryLimits || {};
 
     el.innerHTML = `
       <div class="page-header">
@@ -786,14 +772,14 @@ const App = (() => {
 
       <div class="section-label">Profile</div>
       <div class="settings-section">
-        <div class="settings-row" onclick="App.editSetting('name','Your name', '${user.name || ''}')">
+        <div class="settings-row" onclick="App.editSetting('name','Your name','${user.name || ''}')">
           <span class="settings-row-label">Name</span>
           <div style="display:flex; align-items:center; gap:8px;">
             <span class="settings-row-value">${user.name || '—'}</span>
             <span class="settings-row-chevron">›</span>
           </div>
         </div>
-        <div class="settings-row" onclick="App.editSetting('income','Monthly income', '${user.income || ''}', 'number')">
+        <div class="settings-row" onclick="App.editSetting('income','Monthly income','${user.income || ''}','number')">
           <span class="settings-row-label">Monthly income</span>
           <div style="display:flex; align-items:center; gap:8px;">
             <span class="settings-row-value">${Data.formatCurrency(user.income || 0)}</span>
@@ -815,15 +801,21 @@ const App = (() => {
 
       <div class="section-label">Budget limits</div>
       <div class="settings-section">
-        ${['Groceries','Eating out','Hobbies','Gas','Other'].map(cat => `
-          <div class="settings-row" onclick="App.editCatLimit('${cat}')">
-            <span class="settings-row-label">${cat}</span>
-            <div style="display:flex; align-items:center; gap:8px;">
-              <span class="settings-row-value">${Data.formatCurrency((user.categoryLimits||{})[cat] || 0)}/mo</span>
-              <span class="settings-row-chevron">›</span>
+        ${categories.map(cat => {
+          const isFixed = fixedCosts.some(f => f.name === cat);
+          const val = isFixed
+            ? parseFloat((fixedCosts.find(f => f.name === cat)||{}).amount) || 0
+            : parseFloat(limits[cat]) || 0;
+          return `
+            <div class="settings-row" onclick="App.editCatLimit('${cat}')">
+              <span class="settings-row-label">${cat} ${isFixed ? '<span style="font-size:10px;color:var(--ink-muted);">fixed</span>' : ''}</span>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span class="settings-row-value">${Data.formatCurrency(val)}/mo</span>
+                <span class="settings-row-chevron">›</span>
+              </div>
             </div>
-          </div>
-        `).join('')}
+          `;
+        }).join('')}
       </div>
 
       <div class="section-label">Data</div>
@@ -872,7 +864,12 @@ const App = (() => {
 
   function editCatLimit(cat) {
     const user = Data.getUser() || {};
-    const current = (user.categoryLimits || {})[cat] || 0;
+    const fixedCosts = user.fixedCosts || [];
+    const isFixed = fixedCosts.some(f => f.name === cat);
+    const current = isFixed
+      ? parseFloat((fixedCosts.find(f => f.name === cat)||{}).amount) || 0
+      : parseFloat((user.categoryLimits||{})[cat]) || 0;
+
     const backdrop = document.createElement('div');
     backdrop.className = 'edit-modal-backdrop';
     backdrop.innerHTML = `
@@ -885,7 +882,7 @@ const App = (() => {
         </div>
         <div class="edit-modal-actions">
           <button class="edit-modal-cancel" onclick="App.closeModal()">Cancel</button>
-          <button class="edit-modal-save" onclick="App.saveCatLimit('${cat}')">Save</button>
+          <button class="edit-modal-save" onclick="App.saveCatLimit('${cat}', ${isFixed})">Save</button>
         </div>
       </div>
     `;
@@ -893,12 +890,17 @@ const App = (() => {
     setTimeout(() => backdrop.querySelector('input').select(), 100);
   }
 
-  function saveCatLimit(cat) {
+  function saveCatLimit(cat, isFixed) {
     const val = parseFloat(document.getElementById('modal-cat-input').value) || 0;
     const user = Data.getUser() || {};
-    const limits = { ...(user.categoryLimits || {}) };
-    limits[cat] = val;
-    Data.saveUser({ categoryLimits: limits });
+    if (isFixed) {
+      const fixedCosts = (user.fixedCosts || []).map(f => f.name === cat ? { ...f, amount: val } : f);
+      Data.saveUser({ fixedCosts });
+    } else {
+      const limits = { ...(user.categoryLimits || {}) };
+      limits[cat] = val;
+      Data.saveUser({ categoryLimits: limits });
+    }
     closeModal();
     renderSettings();
   }
@@ -921,7 +923,7 @@ const App = (() => {
   }
 
   function downloadBlank() {
-    alert('To get a blank version of Ledger:\n\n1. Copy the /budget-app folder\n2. Delete budget_user, budget_expenses, and budget_insights_cache from localStorage\n3. Share the folder — the next person who opens it will go through fresh onboarding.');
+    alert('To get a blank version of Ledger:\n\n1. Copy the /budget-app folder\n2. Share the folder — the next person who opens it will go through fresh onboarding.');
   }
 
   function confirmReset() {
@@ -936,13 +938,11 @@ const App = (() => {
     const now = new Date();
     const user = Data.getUser();
     if (!user) return;
-
     const summaryDate = user.summaryDate;
     const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     const targetDay = summaryDate === 'last' ? lastDay : parseInt(summaryDate);
     const year = now.getFullYear();
     const month = now.getMonth() + 1;
-
     if (now.getDate() === targetDay && !Data.isMonthlyDismissed(year, month)) {
       setTimeout(() => showMonthlyWrap(year, month), 800);
     }
@@ -951,141 +951,123 @@ const App = (() => {
   function showMonthlyWrap(year, month) {
     const summary = Data.getMonthlySummary(year, month);
     if (!summary) return;
-
     const monthName = new Date(year, month - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
     const insights = Insights.calculate(year, month);
     const user = Data.getUser() || {};
     const income = parseFloat(user.income) || 0;
+    const surplusPositive = summary.surplus > 0;
 
     const backdrop = document.createElement('div');
     backdrop.className = 'monthly-modal';
     backdrop.id = 'monthly-modal';
 
-    // Split categories into fixed vs variable
-    const fixedEntries = Object.entries(summary.byCategory).filter(([, d]) => d.isFixed);
-    const varEntries = Object.entries(summary.byCategory).filter(([, d]) => !d.isFixed && d.spent > 0);
+    const fixedEntries = Object.entries(summary.byCategory).filter(([,d]) => d.isFixed);
+    const varEntries = Object.entries(summary.byCategory).filter(([,d]) => !d.isFixed && d.spent > 0);
 
     function catRow(cat, data) {
       const diff = data.limit > 0 ? data.spent - data.limit : null;
       const pct = data.limit > 0 ? Math.min(100, Math.round((data.spent / data.limit) * 100)) : null;
-      const overColor = diff > 0 ? 'var(--ink-red)' : 'var(--ink-green)';
-      const diffLabel = diff !== null
+      const diffHtml = diff !== null
         ? (diff > 0
-          ? `<span style="font-size:11px; color:var(--ink-red);">+${Data.formatCurrency(diff)} over</span>`
-          : `<span style="font-size:11px; color:var(--ink-green);">${Data.formatCurrency(Math.abs(diff))} under</span>`)
+          ? `<div style="font-size:11px;color:var(--ink-red);">$${Math.round(Math.abs(diff)).toLocaleString()} over</div>`
+          : `<div style="font-size:11px;color:var(--ink-green);">$${Math.round(Math.abs(diff)).toLocaleString()} under</div>`)
         : '';
-      const bar = pct !== null ? `
-        <div style="height:3px; background:var(--divider); border-radius:2px; margin-top:4px;">
-          <div style="height:3px; width:${pct}%; background:${diff > 0 ? 'var(--ink-red)' : 'var(--accent)'}; border-radius:2px;"></div>
-        </div>` : '';
+      const barHtml = pct !== null
+        ? `<div style="height:3px;background:var(--divider);border-radius:2px;margin-top:5px;"><div style="height:3px;width:${pct}%;background:${diff>0?'var(--ink-red)':'var(--accent)'};border-radius:2px;"></div></div>`
+        : '';
       return `
-        <div class="monthly-cat-row">
-          <div style="flex:1;">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <span style="color:var(--ink); font-size:14px;">${cat}</span>
-              <div style="display:flex; align-items:center; gap:8px;">
-                <span style="font-weight:500; color:var(--ink); font-size:14px;">${Data.formatCurrency(data.spent)}</span>
-                ${data.limit > 0 ? `<span style="font-size:11px; color:var(--ink-muted);">of ${Data.formatCurrency(data.limit)}</span>` : ''}
-              </div>
+        <div style="padding:10px 0;border-bottom:0.5px solid var(--divider);">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-size:14px;color:var(--ink);">${cat}</span>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="font-size:14px;font-weight:500;color:var(--ink);">${Data.formatCurrency(data.spent)}</span>
+              ${data.limit > 0 ? `<span style="font-size:11px;color:var(--ink-muted);">of ${Data.formatCurrency(data.limit)}</span>` : ''}
             </div>
-            ${diffLabel}
-            ${bar}
           </div>
-        </div>
-      `;
+          ${diffHtml}${barHtml}
+        </div>`;
     }
 
-    const fixedRows = fixedEntries.map(([cat, data]) => catRow(cat, data)).join('');
-    const varRows = varEntries.map(([cat, data]) => catRow(cat, data)).join('');
+    const fixedRowsHtml = fixedEntries.length ? `
+      <div style="font-size:11px;color:var(--ink-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Fixed costs</div>
+      <div style="background:var(--bg-card);border-radius:var(--radius-card);padding:0 16px;margin-bottom:16px;">
+        ${fixedEntries.map(([cat,data]) => catRow(cat,data)).join('')}
+        <div style="display:flex;justify-content:space-between;padding:8px 0 6px;border-top:0.5px solid var(--divider);margin-top:2px;">
+          <span style="font-size:12px;color:var(--ink-muted);">Fixed total</span>
+          <span style="font-size:12px;font-weight:500;color:var(--ink);">${Data.formatCurrency(summary.fixedTotal)}</span>
+        </div>
+      </div>` : '';
 
-    const surplusPositive = summary.surplus > 0;
+    const varRowsHtml = varEntries.length ? `
+      <div style="font-size:11px;color:var(--ink-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Variable spending</div>
+      <div style="background:var(--bg-card);border-radius:var(--radius-card);padding:0 16px;margin-bottom:16px;">
+        ${varEntries.map(([cat,data]) => catRow(cat,data)).join('')}
+      </div>` : '';
 
     backdrop.innerHTML = `
       <div class="monthly-sheet">
         <div class="monthly-handle"></div>
+        <div style="font-size:22px;font-weight:500;color:var(--ink);margin-bottom:2px;">${monthName}</div>
+        <div style="font-size:13px;color:var(--ink-muted);margin-bottom:20px;">Monthly wrap-up</div>
 
-        <div style="font-size:22px; font-weight:500; color:var(--ink); margin-bottom:2px;">${monthName}</div>
-        <div style="font-size:13px; color:var(--ink-muted); margin-bottom:20px;">Monthly wrap-up</div>
-
-        <!-- Top stats -->
-        <div class="monthly-stat-grid" style="margin-bottom:20px;">
+        <div class="monthly-stat-grid" style="margin-bottom:16px;">
           <div class="monthly-stat">
             <div class="monthly-stat-label">Total spent</div>
             <div class="monthly-stat-val">${Data.formatCurrency(summary.total)}</div>
-            <div style="font-size:11px; color:var(--ink-muted); margin-top:2px;">of ${Data.formatCurrency(income)} income</div>
+            <div style="font-size:11px;color:var(--ink-muted);margin-top:2px;">of ${Data.formatCurrency(income)}</div>
           </div>
           <div class="monthly-stat">
             <div class="monthly-stat-label">${surplusPositive ? 'Surplus' : 'Over budget'}</div>
-            <div class="monthly-stat-val" style="color:${surplusPositive ? 'var(--ink-green)' : 'var(--ink-red)'};">${Data.formatCurrency(Math.abs(summary.surplus))}</div>
-            <div style="font-size:11px; color:var(--ink-muted); margin-top:2px;">${surplusPositive ? 'left over' : 'over income'}</div>
+            <div class="monthly-stat-val" style="color:${surplusPositive?'var(--ink-green)':'var(--ink-red)'};">${Data.formatCurrency(Math.abs(summary.surplus))}</div>
+            <div style="font-size:11px;color:var(--ink-muted);margin-top:2px;">${surplusPositive?'left over':'over income'}</div>
           </div>
         </div>
 
-        <!-- Overall progress bar -->
         <div style="margin-bottom:20px;">
-          <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--ink-muted); margin-bottom:4px;">
-            <span>Budget used</span>
-            <span>${income > 0 ? Math.round((summary.total/income)*100) : 0}%</span>
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--ink-muted);margin-bottom:4px;">
+            <span>Budget used</span><span>${income>0?Math.round((summary.total/income)*100):0}%</span>
           </div>
-          <div style="height:6px; background:var(--divider); border-radius:4px;">
-            <div style="height:6px; width:${income > 0 ? Math.min(100,Math.round((summary.total/income)*100)) : 0}%; background:${surplusPositive ? 'var(--accent)' : 'var(--ink-red)'}; border-radius:4px;"></div>
+          <div style="height:6px;background:var(--divider);border-radius:4px;">
+            <div style="height:6px;width:${income>0?Math.min(100,Math.round((summary.total/income)*100)):0}%;background:${surplusPositive?'var(--accent)':'var(--ink-red)'};border-radius:4px;"></div>
           </div>
         </div>
 
-        <!-- Fixed costs -->
-        ${fixedRows ? `
-          <div style="font-size:11px; color:var(--ink-muted); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">Fixed costs</div>
-          <div style="background:var(--bg-card); border-radius:var(--radius-card); padding:4px 16px; margin-bottom:16px;">
-            ${fixedRows}
-            <div style="display:flex; justify-content:space-between; padding:8px 0 4px; border-top:0.5px solid var(--divider); margin-top:4px;">
-              <span style="font-size:12px; color:var(--ink-muted);">Fixed total</span>
-              <span style="font-size:12px; font-weight:500; color:var(--ink);">${Data.formatCurrency(summary.fixedTotal)}</span>
-            </div>
-          </div>
-        ` : ''}
+        ${fixedRowsHtml}
+        ${varRowsHtml}
 
-        <!-- Variable spending -->
-        ${varRows ? `
-          <div style="font-size:11px; color:var(--ink-muted); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">Variable spending</div>
-          <div style="background:var(--bg-card); border-radius:var(--radius-card); padding:4px 16px; margin-bottom:16px;">${varRows}</div>
-        ` : ''}
-
-        <!-- Habit highlights -->
-        <div style="font-size:11px; color:var(--ink-muted); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">Habit highlights</div>
-        <div style="background:var(--bg-card); border-radius:var(--radius-card); padding:10px 16px; margin-bottom:16px;">
-          <div style="display:flex; justify-content:space-between; padding:5px 0; border-bottom:0.5px solid var(--divider); font-size:13px;">
+        <div style="font-size:11px;color:var(--ink-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Habit highlights</div>
+        <div style="background:var(--bg-card);border-radius:var(--radius-card);padding:0 16px;margin-bottom:16px;">
+          <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:0.5px solid var(--divider);font-size:13px;">
             <span style="color:var(--ink-muted);">🛒 Grocery trips</span>
-            <span style="color:var(--ink); font-weight:500;">${insights.grocery.count} trips · avg ${Data.formatCurrency(insights.grocery.avgSpend)}</span>
+            <span style="font-weight:500;color:var(--ink);">${insights.grocery.count} trips · avg ${Data.formatCurrency(insights.grocery.avgSpend)}</span>
           </div>
-          <div style="display:flex; justify-content:space-between; padding:5px 0; border-bottom:0.5px solid var(--divider); font-size:13px;">
+          <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:0.5px solid var(--divider);font-size:13px;">
             <span style="color:var(--ink-muted);">🍽 Eating out</span>
-            <span style="color:var(--ink); font-weight:500;">${insights.eatingOut.count}x · ${Data.formatCurrency(insights.eatingOut.total)}</span>
+            <span style="font-weight:500;color:var(--ink);">${insights.eatingOut.count}x · ${Data.formatCurrency(insights.eatingOut.total)}</span>
           </div>
-          <div style="display:flex; justify-content:space-between; padding:5px 0; border-bottom:0.5px solid var(--divider); font-size:13px;">
+          <div style="display:flex;justify-content:space-between;padding:7px 0;${insights.hobbies.topHobby ? 'border-bottom:0.5px solid var(--divider);' : ''}font-size:13px;">
             <span style="color:var(--ink-muted);">⛽ Gas fill-ups</span>
-            <span style="color:var(--ink); font-weight:500;">${insights.gas.count} fills · ${Data.formatCurrency(insights.gas.total)}</span>
+            <span style="font-weight:500;color:var(--ink);">${insights.gas.count} fills · ${Data.formatCurrency(insights.gas.total)}</span>
           </div>
           ${insights.hobbies.topHobby ? `
-          <div style="display:flex; justify-content:space-between; padding:5px 0; font-size:13px;">
+          <div style="display:flex;justify-content:space-between;padding:7px 0;font-size:13px;">
             <span style="color:var(--ink-muted);">🎯 Top hobby</span>
-            <span style="color:var(--ink); font-weight:500;">${insights.hobbies.topHobby.name} · ${Data.formatCurrency(insights.hobbies.topHobby.amount)}</span>
+            <span style="font-weight:500;color:var(--ink);">${insights.hobbies.topHobby.name} · ${Data.formatCurrency(insights.hobbies.topHobby.amount)}</span>
           </div>` : ''}
         </div>
 
-        <!-- Investment suggestion -->
-        <div style="background:var(--bg-card); border-radius:var(--radius-card); padding:16px; margin-bottom:20px; border-left:3px solid var(--accent); border-top-left-radius:0; border-bottom-left-radius:0;">
-          <div style="font-size:12px; color:var(--ink-muted); margin-bottom:4px; text-transform:uppercase; letter-spacing:0.05em;">Investment opportunity</div>
-          <div style="font-size:26px; font-weight:500; color:var(--accent); margin:6px 0;">${Data.formatCurrency(summary.investLow)} – ${Data.formatCurrency(summary.investHigh)}</div>
-          <div style="font-size:12px; color:var(--ink-muted); line-height:1.5;">You could comfortably put this away in investments this month if you want. Based on ${surplusPositive ? 'your ' + Data.formatCurrency(summary.surplus) + ' surplus' : 'this month\'s spend'}.</div>
+        <div style="background:var(--bg-card);border-radius:0 var(--radius-card) var(--radius-card) 0;border-left:3px solid var(--accent);padding:16px;margin-bottom:20px;">
+          <div style="font-size:11px;color:var(--ink-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">Investment opportunity</div>
+          <div style="font-size:26px;font-weight:500;color:var(--accent);margin:6px 0;">${Data.formatCurrency(summary.investLow)} – ${Data.formatCurrency(summary.investHigh)}</div>
+          <div style="font-size:12px;color:var(--ink-muted);line-height:1.5;">You could comfortably put this away in investments this month if you want.</div>
         </div>
 
         <div class="monthly-actions">
-          <button class="monthly-action-btn monthly-action-secondary" onclick="App.dismissMonthly(${year}, ${month})">Dismiss</button>
-          <button class="monthly-action-btn monthly-action-primary" onclick="App.dismissMonthly(${year}, ${month})">Start next month</button>
+          <button class="monthly-action-btn monthly-action-secondary" onclick="App.dismissMonthly(${year},${month})">Dismiss</button>
+          <button class="monthly-action-btn monthly-action-primary" onclick="App.dismissMonthly(${year},${month})">Start next month</button>
         </div>
       </div>
     `;
-
     document.getElementById('app').appendChild(backdrop);
   }
 
@@ -1103,7 +1085,6 @@ const App = (() => {
   function formatDisplayDate(dateStr) {
     if (!dateStr) return '';
     const d = new Date(dateStr + 'T12:00:00');
-    const today = new Date();
     const todayStr = Data.getTodayStr();
     if (dateStr === todayStr) return 'Today';
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -1112,9 +1093,7 @@ const App = (() => {
   function formatWeekLabel(start, end) {
     const sMonth = start.toLocaleDateString('en-US', { month: 'short' });
     const eMonth = end.toLocaleDateString('en-US', { month: 'short' });
-    if (sMonth === eMonth) {
-      return `${sMonth} ${start.getDate()}–${end.getDate()}`;
-    }
+    if (sMonth === eMonth) return `${sMonth} ${start.getDate()}–${end.getDate()}`;
     return `${sMonth} ${start.getDate()} – ${eMonth} ${end.getDate()}`;
   }
 
@@ -1134,5 +1113,4 @@ const App = (() => {
   };
 })();
 
-// Boot on DOM ready
 document.addEventListener('DOMContentLoaded', () => App.boot());
