@@ -1,6 +1,6 @@
 // Ledger service worker
 // Bump CACHE_VERSION every time you push a change you want users to get.
-var CACHE_VERSION = "ledger-v5";
+var CACHE_VERSION = "ledger-v6";
 
 var SHELL = [
   "./",

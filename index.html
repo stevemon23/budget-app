@@ -60,27 +60,21 @@
   .chip .val{font-size:20px;margin-top:4px;}
   .val.pos{color:var(--good);} .val.neg{color:var(--expense);}
 
-  /* recurring banner */
-  .banner{background:var(--accent-soft);border:1px solid var(--accent);border-radius:14px;
-    padding:12px 14px;margin-bottom:12px;position:relative;}
-  .banner .bl{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
-    color:var(--accent);margin-bottom:4px;}
-  .banner .bt{font-size:15px;}
-  .banner .bt b{font-family:var(--mono);font-variant-numeric:tabular-nums;}
-  .banner .acts{display:flex;gap:8px;margin-top:10px;}
-  .banner button{flex:1;padding:9px;border-radius:10px;font-size:14px;font-weight:600;border:1px solid var(--accent);}
-  .banner .add{background:var(--accent);color:#fff;}
-  .banner .skip{background:transparent;color:var(--accent);}
+  /* fixed tag */
+  .tagfixed{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--accent);border:1px solid var(--accent);
+    border-radius:5px;padding:1px 5px;margin-left:7px;vertical-align:1px;}
 
   /* calendar */
   .cal{background:var(--raised);border:1px solid var(--line);border-radius:16px;
     padding:10px 10px 12px;box-shadow:0 1px 3px var(--shadow);}
-  .dow{display:grid;grid-template-columns:repeat(7,1fr);margin-bottom:4px;}
-  .dow span{text-align:center;font-size:10px;font-weight:700;letter-spacing:.06em;
-    color:var(--ink-soft);padding:4px 0;}
+  .dow{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:4px;}
+  .dow span{text-align:center;font-size:10px;font-weight:700;letter-spacing:.02em;
+    color:var(--ink-soft);padding:4px 0;overflow:hidden;}
   .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
-  .cell{aspect-ratio:1/1.12;border-radius:9px;padding:5px 4px;display:flex;flex-direction:column;
-    justify-content:space-between;background:transparent;border:1px solid transparent;text-align:left;}
+  .cell{aspect-ratio:1/1.12;border-radius:9px;padding:4px 3px;display:flex;flex-direction:column;
+    justify-content:space-between;background:transparent;border:1px solid transparent;text-align:left;
+    min-width:0;overflow:hidden;}
   .cell.on{background:var(--paper);border-color:var(--line-soft);}
   .cell.today{border-color:var(--accent);}
   .cell.empty{background:transparent;}
@@ -312,8 +306,8 @@
   function totalFor(y,m){
     return expensesFor(y,m).reduce(function(a,e){ return a + Number(e.amount); }, 0);
   }
-  function addExpense(date, label, amount){
-    state.expenses.push({ id:uid(), date:date, label:label, amount:Number(amount) });
+  function addExpense(date, label, amount, fixed){
+    state.expenses.push({ id:uid(), date:date, label:label, amount:Number(amount), fixed:!!fixed });
     save(K.exp, state.expenses);
   }
   function removeExpense(id){
@@ -332,56 +326,37 @@
     save(K.rec, state.recurring);
   }
 
-  // Auto-add pass: runs on every load. For each recurring rule, walk from the
-  // month it started up to the current month and drop the expense in on its day
-  // — for past months always, for the current month once that day has arrived.
-  // reclog guards against double-adding, so this is safe to run repeatedly.
-  function ensureRecurring(){
-    var t = new Date();
-    var curY = t.getFullYear(), curM = t.getMonth(), curD = t.getDate();
+  // FIXED EXPENSES: materialize every fixed rule into a given month.
+  // A fixed expense exists in every month from the month it was created onward
+  // — past, present, and any future month you look at. No waiting for the day
+  // to arrive. reclog remembers which months have been filled in, so this is
+  // safe to run repeatedly and deleting one occurrence doesn't resurrect it.
+  function materializeFixed(y, m){
     var changed = false;
     state.recurring.forEach(function(r){
-      var startYM = r.createdYM || (curY+"-"+pad(curM+1));
-      var sy = Number(startYM.split("-")[0]);
-      var sm = Number(startYM.split("-")[1]) - 1;
-      var y = sy, m = sm;
-      // safety cap so a very old rule can't loop forever
-      for(var guard=0; guard<600; guard++){
-        if(y>curY || (y===curY && m>curM)) break;   // don't go past this month
-        var dim = daysInMonth(y,m);
-        var eff = r.day > dim ? dim : r.day;         // clamp 31st in short months
-        var isCurrent = (y===curY && m===curM);
-        var dueReached = isCurrent ? (curD >= eff) : true;
-        var key = y+"-"+pad(m+1)+"-"+r.id;
-        if(dueReached && !state.reclog[key]){
-          addExpense(y+"-"+pad(m+1)+"-"+pad(eff), r.label, r.amount);
-          state.reclog[key] = "auto";
-          changed = true;
-        }
-        m++; if(m>11){ m=0; y++; }
-      }
+      var startYM = r.createdYM || "0000-01";
+      var thisYM = y+"-"+pad(m+1);
+      if(thisYM < startYM) return;                 // before the rule existed
+      var key = y+"-"+pad(m+1)+"-"+r.id;
+      if(state.reclog[key]) return;                // already filled (or removed on purpose)
+      var dim = daysInMonth(y,m);
+      var eff = r.day > dim ? dim : r.day;         // clamp 31st in short months
+      addExpense(y+"-"+pad(m+1)+"-"+pad(eff), r.label, r.amount, true);
+      state.reclog[key] = "auto";
+      changed = true;
     });
     if(changed) save(K.reclog, state.reclog);
   }
-  // which recurring items are due *today* and not yet handled this month
-  function dueRecurring(){
+
+  // Fill every month the user can currently see, plus the real current month,
+  // plus one month ahead so next month's rent is always already on the books.
+  function ensureFixed(){
     var t = new Date();
-    var y=t.getFullYear(), m=t.getMonth(), d=t.getDate();
-    var dim = daysInMonth(y,m);
-    var out=[];
-    state.recurring.forEach(function(r){
-      var eff = r.day > dim ? dim : r.day;              // clamp e.g. 31st in a 30-day month
-      if(eff!==d) return;
-      var key = y+"-"+pad(m+1)+"-"+r.id;
-      if(state.reclog[key]) return;                     // added or skipped already
-      out.push(r);
-    });
-    return out;
-  }
-  function logRecurring(r, action){
-    var t=new Date();
-    var key = t.getFullYear()+"-"+pad(t.getMonth()+1)+"-"+r.id;
-    state.reclog[key]=action; save(K.reclog, state.reclog);
+    materializeFixed(t.getFullYear(), t.getMonth());
+    var next = new Date(t.getFullYear(), t.getMonth()+1, 1);
+    materializeFixed(next.getFullYear(), next.getMonth());
+    materializeFixed(view.y, view.m);
+    materializeFixed(rep.y, rep.m);
   }
 
   // ---------- render root ----------
@@ -393,7 +368,7 @@
     applyTheme();
     clear(root);
     if(!state.onboarded){ root.appendChild(renderOnboard()); return; }
-    ensureRecurring();
+    ensureFixed();
     var wrap = el("div",{class:"wrap"});
     wrap.appendChild(renderHeader());
     if(state.tab==="calendar") wrap.appendChild(renderCalendar());
@@ -488,22 +463,6 @@
     return frag;
   }
 
-  function recurringBanner(r){
-    return el("div",{class:"banner"},[
-      el("div",{class:"bl",text:"Recurring · due today"}),
-      el("div",{class:"bt"},[ r.label+" — ", el("b",{text:money(r.amount)}) ]),
-      el("div",{class:"acts"},[
-        el("button",{class:"add",text:"Add it", onclick:function(){
-          addExpense(ymd(new Date()), r.label, r.amount);
-          logRecurring(r,"added"); render();
-        }}),
-        el("button",{class:"skip",text:"Not this month", onclick:function(){
-          logRecurring(r,"skipped"); render();
-        }})
-      ])
-    ]);
-  }
-
   function stepMonth(obj, dir, cb){
     obj.m += dir;
     if(obj.m<0){ obj.m=11; obj.y--; }
@@ -595,21 +554,23 @@
       sheet.appendChild(el("label",{class:"check"},[
         repI = el("input",{type:"checkbox"}),
         el("div",{},[
-          el("div",{class:"ct",text:"Repeats monthly on this day"}),
-          el("div",{class:"cs",text:"Added automatically each month on this day. Manage or remove it in Settings."})
+          el("div",{class:"ct",text:"Fixed monthly expense"}),
+          el("div",{class:"cs",text:"Logged automatically every month on this day — this month and every month after. Manage it in Settings."})
         ])
       ]));
       sheet.appendChild(el("button",{class:"primary",text:"Add to this day", onclick:function(){
         var label = whatI.value.trim() || "Expense";
         var amt = parseFloat(amtI.value);
         if(isNaN(amt)||amt<=0){ amtI.focus(); return; }
-        addExpense(dateStr, label, amt);
         if(repI.checked){
           var day = Number(dateStr.split("-")[2]);
           var ym = dateStr.slice(0,7);
           var rec = addRecurring(day, label, amt, ym);
-          // this month is already covered by the expense we just added
+          addExpense(dateStr, label, amt, true);
+          // this month is covered by the expense we just added
           state.reclog[ym+"-"+rec.id] = "added"; save(K.reclog, state.reclog);
+        } else {
+          addExpense(dateStr, label, amt, false);
         }
         closeSheet(); render();
       }}));
@@ -638,7 +599,7 @@
       return el("button",{class:(state.reportView===id?"on":""), onclick:function(){ state.reportView=id; render(); }},label);
     }
     frag.appendChild(el("div",{class:"seg no-print"},[
-      seg("day","By day"), seg("week","By week"), seg("expensive","Most expensive")
+      seg("day","Itemized"), seg("totals","Totals")
     ]));
 
     // save / share button (screen only) — hands off to the iPhone share sheet
@@ -672,15 +633,14 @@
     if(items.length===0){
       report.appendChild(el("div",{class:"empty"},[
         el("div",{class:"eb",text:"No expenses this month"}),
-        el("div",{class:"es",text:"Log something and it shows up here — by day, by week, and by biggest first. Then you can save or screenshot it."})
+        el("div",{class:"es",text:"Log something and it shows up here — every entry by date, and totals grouped by name."})
       ]));
       frag.appendChild(report);
       return frag;
     }
 
-    if(state.reportView==="day") report.appendChild(reportByDay(items));
-    else if(state.reportView==="week") report.appendChild(reportByWeek(items));
-    else report.appendChild(reportExpensive(items));
+    if(state.reportView==="totals") report.appendChild(reportTotals(items));
+    else report.appendChild(reportByDay(items));
 
     frag.appendChild(report);
     return frag;
@@ -692,8 +652,9 @@
     if(window.print) window.print();
   }
 
-  function rowLine(label, sub, amount){
+  function rowLine(label, sub, amount, isFixed){
     var left = [ el("span",{text:label}) ];
+    if(isFixed) left.push(el("span",{class:"tagfixed",text:"Fixed"}));
     if(sub) left.push(el("small",{text:sub}));
     return el("div",{class:"row"},[
       el("div",{class:"rl"}, left),
@@ -713,49 +674,44 @@
         el("div",{class:"dh",text:DOW[d.getDay()]+", "+MON[d.getMonth()]+" "+d.getDate()}),
         el("div",{class:"ds num",text:money(sub)})
       ]));
-      list.forEach(function(e){ box.appendChild(rowLine(e.label||"Expense", null, e.amount)); });
+      list.forEach(function(e){ box.appendChild(rowLine(e.label||"Expense", null, e.amount, e.fixed)); });
     });
     return box;
   }
 
-  function reportByWeek(items){
+  // TOTALS: auto-group every expense by its name (case-insensitive, trimmed),
+  // so "Uber Eats" on the 2nd and the 4th roll up into one line. Fixed
+  // expenses float to the top as their own section, everyday spending below,
+  // both sorted biggest first.
+  function reportTotals(items){
     var box = el("div",{});
-    var groups = {};
-    items.forEach(function(e){
-      var d = parseYmd(e.date);
-      var sun = new Date(d); sun.setDate(d.getDate()-d.getDay());   // Sunday of that week
-      var key = ymd(sun);
-      (groups[key]=groups[key]||[]).push(e);
-    });
-    Object.keys(groups).sort().forEach(function(key){
-      var list = groups[key];
-      var sub = list.reduce(function(a,e){ return a+Number(e.amount); },0);
-      var start = parseYmd(key); var end = new Date(start); end.setDate(start.getDate()+6);
-      var label = MON[start.getMonth()].slice(0,3)+" "+start.getDate()+" – "+MON[end.getMonth()].slice(0,3)+" "+end.getDate();
+    function groupOf(list){
+      var g = {};
+      list.forEach(function(e){
+        var key = String(e.label||"Expense").trim().toLowerCase();
+        if(!g[key]) g[key] = { name:String(e.label||"Expense").trim(), total:0, count:0 };
+        g[key].total += Number(e.amount);
+        g[key].count += 1;
+      });
+      return Object.keys(g).map(function(k){ return g[k]; })
+        .sort(function(a,b){ return b.total-a.total; });
+    }
+    var fixed = groupOf(items.filter(function(e){ return e.fixed; }));
+    var everyday = groupOf(items.filter(function(e){ return !e.fixed; }));
+
+    function section(title, rows){
+      if(rows.length===0) return;
+      var sub = rows.reduce(function(a,r){ return a+r.total; },0);
       box.appendChild(el("div",{class:"dayhead"},[
-        el("div",{class:"dh",text:label}),
+        el("div",{class:"dh",text:title}),
         el("div",{class:"ds num",text:money(sub)})
       ]));
-      list.sort(function(a,b){ return a.date<b.date?-1:1; });
-      list.forEach(function(e){
-        var d=parseYmd(e.date);
-        box.appendChild(rowLine(e.label||"Expense", DOW[d.getDay()]+" "+d.getDate(), e.amount));
+      rows.forEach(function(r){
+        box.appendChild(rowLine(r.name, r.count>1 ? (r.count+"×") : null, r.total));
       });
-    });
-    return box;
-  }
-
-  function reportExpensive(items){
-    var box = el("div",{});
-    box.appendChild(el("div",{class:"dayhead"},[
-      el("div",{class:"dh",text:"Biggest first"}),
-      el("div",{class:"ds",text:String(items.length)+" items"})
-    ]));
-    var sorted = items.slice().sort(function(a,b){ return Number(b.amount)-Number(a.amount); });
-    sorted.forEach(function(e){
-      var d=parseYmd(e.date);
-      box.appendChild(rowLine(e.label||"Expense", MON[d.getMonth()].slice(0,3)+" "+d.getDate(), e.amount));
-    });
+    }
+    section("Fixed", fixed);
+    section("Everything else", everyday);
     return box;
   }
 
@@ -782,10 +738,10 @@
 
     // recurring
     var recCard = el("div",{class:"card"});
-    recCard.appendChild(el("h4",{text:"Recurring expenses"}));
-    recCard.appendChild(el("p",{class:"hint",text:"Added to your log automatically each month on its day. Remove one here to stop it."}));
+    recCard.appendChild(el("h4",{text:"Fixed expenses"}));
+    recCard.appendChild(el("p",{class:"hint",text:"Rent, subscriptions, car payment — logged automatically every month on their day. Remove one here to stop it going forward."}));
     if(state.recurring.length===0){
-      recCard.appendChild(el("div",{class:"es",style:{color:"var(--ink-soft)",fontSize:"13px",paddingBottom:"12px"},text:"None yet. Tick “Repeats monthly” when adding an expense, or add one below."}));
+      recCard.appendChild(el("div",{class:"es",style:{color:"var(--ink-soft)",fontSize:"13px",paddingBottom:"12px"},text:"None yet. Tick “Fixed monthly expense” when adding one, or add it below."}));
     } else {
       state.recurring.slice().sort(function(a,b){return a.day-b.day;}).forEach(function(r){
         recCard.appendChild(el("div",{class:"reccard"},[
@@ -807,7 +763,7 @@
         el("div",{class:"amtinput"},[ rAmt=el("input",{type:"number",inputmode:"decimal",placeholder:"0.00"}) ]) ]),
       el("div",{class:"field"},[ el("label",{text:"Day of month (1–31)"}),
         rDay=el("input",{type:"number",inputmode:"numeric",placeholder:"1",min:"1",max:"31"}) ]),
-      el("button",{class:"primary",text:"Add recurring", onclick:function(){
+      el("button",{class:"primary",text:"Add fixed expense", onclick:function(){
         var lab=rLabel.value.trim(); var amt=parseFloat(rAmt.value); var day=parseInt(rDay.value,10);
         if(!lab||isNaN(amt)||amt<=0||isNaN(day)||day<1||day>31){ return; }
         addRecurring(day, lab, amt); render();
@@ -845,6 +801,15 @@
   applyTheme();
   render();
 
+  if("serviceWorker" in navigator){
+    window.addEventListener("load", function(){
+      navigator.serviceWorker.register("./sw.js").catch(function(){});
+    });
+  }
+})();
+</script>
+</body>
+</html>
   if("serviceWorker" in navigator){
     window.addEventListener("load", function(){
       navigator.serviceWorker.register("./sw.js").catch(function(){});
