@@ -1,33 +1,39 @@
-const CACHE_NAME = 'ledger-v3';
-const ASSETS = [
-  '/budget-app/',
-  '/budget-app/index.html',
-  '/budget-app/manifest.json',
-  '/budget-app/css/theme.css',
-  '/budget-app/js/data.js',
-  '/budget-app/js/insights.js',
-  '/budget-app/js/onboarding.js',
-  '/budget-app/js/app.js',
-  '/budget-app/icons/icon-192.png',
-  '/budget-app/icons/icon-512.png'
-];
+// Ledger service worker
+// Bump CACHE_VERSION every time you push a change you want users to get.
+var CACHE_VERSION = "ledger-v4";
 
-self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(ASSETS)));
+var SHELL = [ "./", "./index.html", "./manifest.json" ];
+
+self.addEventListener("install", function(event){
   self.skipWaiting();
-});
-
-self.addEventListener('activate', e => {
-  e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
-    )
+  event.waitUntil(
+    caches.open(CACHE_VERSION).then(function(cache){
+      return cache.addAll(SHELL).catch(function(){});
+    })
   );
-  self.clients.claim();
 });
 
-self.addEventListener('fetch', e => {
-  e.respondWith(
-    caches.match(e.request).then(cached => cached || fetch(e.request))
+self.addEventListener("activate", function(event){
+  event.waitUntil(
+    caches.keys().then(function(keys){
+      return Promise.all(keys.map(function(key){
+        if(key !== CACHE_VERSION) return caches.delete(key);
+      }));
+    }).then(function(){ return self.clients.claim(); })
+  );
+});
+
+self.addEventListener("fetch", function(event){
+  if(event.request.method !== "GET") return;
+  event.respondWith(
+    fetch(event.request).then(function(response){
+      var copy = response.clone();
+      caches.open(CACHE_VERSION).then(function(cache){ cache.put(event.request, copy); });
+      return response;
+    }).catch(function(){
+      return caches.match(event.request).then(function(hit){
+        return hit || caches.match("./index.html");
+      });
+    })
   );
 });
