@@ -320,13 +320,48 @@
     state.expenses = state.expenses.filter(function(e){ return e.id!==id; });
     save(K.exp, state.expenses);
   }
-  function addRecurring(day, label, amount){
-    state.recurring.push({ id:uid(), day:Number(day), label:label, amount:Number(amount) });
+  function addRecurring(day, label, amount, createdYM){
+    var rec = { id:uid(), day:Number(day), label:label, amount:Number(amount),
+                createdYM: createdYM || ymd(new Date()).slice(0,7) };
+    state.recurring.push(rec);
     save(K.rec, state.recurring);
+    return rec;
   }
   function removeRecurring(id){
     state.recurring = state.recurring.filter(function(r){ return r.id!==id; });
     save(K.rec, state.recurring);
+  }
+
+  // Auto-add pass: runs on every load. For each recurring rule, walk from the
+  // month it started up to the current month and drop the expense in on its day
+  // — for past months always, for the current month once that day has arrived.
+  // reclog guards against double-adding, so this is safe to run repeatedly.
+  function ensureRecurring(){
+    var t = new Date();
+    var curY = t.getFullYear(), curM = t.getMonth(), curD = t.getDate();
+    var changed = false;
+    state.recurring.forEach(function(r){
+      var startYM = r.createdYM || (curY+"-"+pad(curM+1));
+      var sy = Number(startYM.split("-")[0]);
+      var sm = Number(startYM.split("-")[1]) - 1;
+      var y = sy, m = sm;
+      // safety cap so a very old rule can't loop forever
+      for(var guard=0; guard<600; guard++){
+        if(y>curY || (y===curY && m>curM)) break;   // don't go past this month
+        var dim = daysInMonth(y,m);
+        var eff = r.day > dim ? dim : r.day;         // clamp 31st in short months
+        var isCurrent = (y===curY && m===curM);
+        var dueReached = isCurrent ? (curD >= eff) : true;
+        var key = y+"-"+pad(m+1)+"-"+r.id;
+        if(dueReached && !state.reclog[key]){
+          addExpense(y+"-"+pad(m+1)+"-"+pad(eff), r.label, r.amount);
+          state.reclog[key] = "auto";
+          changed = true;
+        }
+        m++; if(m>11){ m=0; y++; }
+      }
+    });
+    if(changed) save(K.reclog, state.reclog);
   }
   // which recurring items are due *today* and not yet handled this month
   function dueRecurring(){
@@ -358,6 +393,7 @@
     applyTheme();
     clear(root);
     if(!state.onboarded){ root.appendChild(renderOnboard()); return; }
+    ensureRecurring();
     var wrap = el("div",{class:"wrap"});
     wrap.appendChild(renderHeader());
     if(state.tab==="calendar") wrap.appendChild(renderCalendar());
@@ -419,11 +455,6 @@
       el("div",{class:"chip"},[ el("div",{class:"lab",text:"Surplus"}),
         el("div",{class:"val num "+(surplus>=0?"pos":"neg"),text:money0(surplus)}) ])
     ]));
-
-    // recurring due-today banners (only meaningful on the real current month)
-    if(view.y===today.getFullYear() && view.m===today.getMonth()){
-      dueRecurring().forEach(function(r){ frag.appendChild(recurringBanner(r)); });
-    }
 
     // calendar card
     var card = el("div",{class:"cal"});
@@ -565,7 +596,7 @@
         repI = el("input",{type:"checkbox"}),
         el("div",{},[
           el("div",{class:"ct",text:"Repeats monthly on this day"}),
-          el("div",{class:"cs",text:"You'll get a reminder to add it each month — never logged without your say-so."})
+          el("div",{class:"cs",text:"Added automatically each month on this day. Manage or remove it in Settings."})
         ])
       ]));
       sheet.appendChild(el("button",{class:"primary",text:"Add to this day", onclick:function(){
@@ -575,10 +606,10 @@
         addExpense(dateStr, label, amt);
         if(repI.checked){
           var day = Number(dateStr.split("-")[2]);
-          addRecurring(day, label, amt);
-          // mark this month handled so it doesn't immediately re-prompt today
-          var mk = dateStr.slice(0,7)+"-"+state.recurring[state.recurring.length-1].id;
-          state.reclog[mk]="added"; save(K.reclog, state.reclog);
+          var ym = dateStr.slice(0,7);
+          var rec = addRecurring(day, label, amt, ym);
+          // this month is already covered by the expense we just added
+          state.reclog[ym+"-"+rec.id] = "added"; save(K.reclog, state.reclog);
         }
         closeSheet(); render();
       }}));
@@ -752,7 +783,7 @@
     // recurring
     var recCard = el("div",{class:"card"});
     recCard.appendChild(el("h4",{text:"Recurring expenses"}));
-    recCard.appendChild(el("p",{class:"hint",text:"On its day each month, Ledger reminds you to add it. Nothing is logged automatically."}));
+    recCard.appendChild(el("p",{class:"hint",text:"Added to your log automatically each month on its day. Remove one here to stop it."}));
     if(state.recurring.length===0){
       recCard.appendChild(el("div",{class:"es",style:{color:"var(--ink-soft)",fontSize:"13px",paddingBottom:"12px"},text:"None yet. Tick “Repeats monthly” when adding an expense, or add one below."}));
     } else {
