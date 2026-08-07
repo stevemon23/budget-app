@@ -1,67 +1,825 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <meta name="apple-mobile-web-app-title" content="Ledger" />
-  <meta name="theme-color" content="#A0826D" />
-  <link rel="manifest" href="manifest.json" />
-  <link rel="apple-touch-icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="css/theme.css" />
-  <title>Ledger</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Ledger">
+<meta name="theme-color" content="#F5F0E8">
+<link rel="manifest" href="./manifest.json">
+<title>Ledger</title>
+<style>
+  :root{
+    --paper:#F5F0E8; --raised:#EDE8DF; --ink:#2C2416; --ink-soft:#8B7D6B;
+    --line:#D5CCBF; --line-soft:#E4DDD3; --accent:#A0826D; --accent-soft:#E4DDD3;
+    --expense:#993C1D; --good:#3B6D11; --shadow:rgba(160,130,109,.20);
+    --serif:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;
+    --sans:-apple-system,system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;
+  }
+  html[data-theme="dark"]{
+    --paper:#1C1814; --raised:#27211A; --ink:#F0EBE2; --ink-soft:#7A6D60;
+    --line:#2E2822; --line-soft:#302820; --accent:#C9A882; --accent-soft:#302820;
+    --expense:#F0997B; --good:#97C459; --shadow:rgba(0,0,0,.4);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);
+    font-family:var(--sans);-webkit-font-smoothing:antialiased;}
+  body{min-height:100vh;}
+  .wrap{max-width:520px;margin:0 auto;padding:0 16px calc(96px + env(safe-area-inset-bottom));
+    padding-top:env(safe-area-inset-top);}
+  .num{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em;}
+  button{font-family:inherit;cursor:pointer;}
+  input{font-family:inherit;}
+
+  /* header */
+  .top{padding:22px 2px 10px;display:flex;align-items:flex-end;justify-content:space-between;}
+  .brand{font-family:var(--serif);font-size:30px;font-weight:600;letter-spacing:.5px;
+    line-height:1;position:relative;padding-bottom:7px;}
+  .brand:after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;
+    background:var(--ink);opacity:.85;}
+  .brand small{display:block;font-family:var(--sans);font-size:11px;font-weight:600;
+    letter-spacing:.14em;text-transform:uppercase;color:var(--ink-soft);margin-top:6px;padding-bottom:0;}
+  .brand small:before{content:"";}
+
+  /* month nav */
+  .monthbar{display:flex;align-items:center;justify-content:space-between;margin:14px 0 6px;}
+  .monthbar h2{font-family:var(--serif);font-size:20px;font-weight:600;margin:0;}
+  .navbtn{width:38px;height:38px;border-radius:50%;border:1px solid var(--line);
+    background:var(--raised);color:var(--ink);font-size:18px;line-height:1;
+    display:flex;align-items:center;justify-content:center;}
+  .navbtn:active{background:var(--accent-soft);}
+
+  /* summary chips */
+  .chips{display:flex;gap:10px;margin:2px 0 14px;}
+  .chip{flex:1;background:var(--raised);border:1px solid var(--line);border-radius:14px;
+    padding:11px 13px;}
+  .chip .lab{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--ink-soft);}
+  .chip .val{font-size:20px;margin-top:4px;}
+  .val.pos{color:var(--good);} .val.neg{color:var(--expense);}
+
+  /* recurring banner */
+  .banner{background:var(--accent-soft);border:1px solid var(--accent);border-radius:14px;
+    padding:12px 14px;margin-bottom:12px;position:relative;}
+  .banner .bl{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--accent);margin-bottom:4px;}
+  .banner .bt{font-size:15px;}
+  .banner .bt b{font-family:var(--mono);font-variant-numeric:tabular-nums;}
+  .banner .acts{display:flex;gap:8px;margin-top:10px;}
+  .banner button{flex:1;padding:9px;border-radius:10px;font-size:14px;font-weight:600;border:1px solid var(--accent);}
+  .banner .add{background:var(--accent);color:#fff;}
+  .banner .skip{background:transparent;color:var(--accent);}
+
+  /* calendar */
+  .cal{background:var(--raised);border:1px solid var(--line);border-radius:16px;
+    padding:10px 10px 12px;box-shadow:0 1px 3px var(--shadow);}
+  .dow{display:grid;grid-template-columns:repeat(7,1fr);margin-bottom:4px;}
+  .dow span{text-align:center;font-size:10px;font-weight:700;letter-spacing:.06em;
+    color:var(--ink-soft);padding:4px 0;}
+  .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
+  .cell{aspect-ratio:1/1.12;border-radius:9px;padding:5px 4px;display:flex;flex-direction:column;
+    justify-content:space-between;background:transparent;border:1px solid transparent;text-align:left;}
+  .cell.on{background:var(--paper);border-color:var(--line-soft);}
+  .cell.today{border-color:var(--accent);}
+  .cell.empty{background:transparent;}
+  .cell .d{font-size:12px;color:var(--ink-soft);font-weight:600;}
+  .cell.today .d{color:var(--accent);}
+  .cell .amt{font-size:10.5px;text-align:right;color:var(--expense);font-family:var(--mono);
+    font-variant-numeric:tabular-nums;line-height:1.1;}
+  .cell.has .d{color:var(--ink);}
+
+  /* fab */
+  .fab{position:fixed;left:50%;transform:translateX(-50%);
+    bottom:calc(74px + env(safe-area-inset-bottom));z-index:30;
+    background:var(--accent);color:#fff;border:none;border-radius:26px;height:52px;
+    padding:0 24px;font-size:16px;font-weight:600;box-shadow:0 4px 14px var(--shadow);
+    display:flex;align-items:center;gap:8px;}
+  .fab span{font-size:22px;line-height:0;margin-top:-2px;}
+
+  /* tab bar */
+  .tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--raised);
+    border-top:1px solid var(--line);display:flex;padding-bottom:env(safe-area-inset-bottom);}
+  .tabs button{flex:1;background:none;border:none;padding:11px 0 12px;color:var(--ink-soft);
+    font-size:11px;font-weight:600;letter-spacing:.03em;display:flex;flex-direction:column;
+    align-items:center;gap:3px;}
+  .tabs button.active{color:var(--accent);}
+  .tabs .ic{font-size:19px;line-height:1;}
+
+  /* sheet */
+  .scrim{position:fixed;inset:0;background:rgba(0,0,0,.34);z-index:40;opacity:0;
+    transition:opacity .18s;}
+  .scrim.show{opacity:1;}
+  .sheet{position:fixed;left:0;right:0;bottom:0;z-index:41;background:var(--paper);
+    border-radius:20px 20px 0 0;padding:8px 18px calc(22px + env(safe-area-inset-bottom));
+    max-width:520px;margin:0 auto;transform:translateY(100%);transition:transform .22s cubic-bezier(.2,.8,.2,1);
+    max-height:88vh;overflow-y:auto;box-shadow:0 -6px 24px var(--shadow);}
+  .sheet.show{transform:translateY(0);}
+  .grab{width:38px;height:4px;border-radius:2px;background:var(--line);margin:8px auto 14px;}
+  .sheet h3{font-family:var(--serif);font-size:20px;margin:0 0 14px;font-weight:600;}
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);
+    margin-bottom:6px;letter-spacing:.02em;}
+  .field input[type=text],.field input[type=number],.field input[type=date]{
+    width:100%;padding:13px 14px;border:1px solid var(--line);border-radius:12px;
+    background:var(--raised);color:var(--ink);font-size:17px;}
+  .field input:focus{outline:none;border-color:var(--accent);}
+  .amtinput{position:relative;}
+  .amtinput:before{content:"$";position:absolute;left:14px;top:50%;transform:translateY(-50%);
+    color:var(--ink-soft);font-family:var(--mono);font-size:17px;}
+  .amtinput input{padding-left:28px !important;font-family:var(--mono);}
+  .check{display:flex;align-items:center;gap:11px;padding:12px 2px;cursor:pointer;}
+  .check input{width:22px;height:22px;accent-color:var(--accent);}
+  .check .ct{font-size:14px;}
+  .check .cs{font-size:12px;color:var(--ink-soft);margin-top:1px;}
+  .primary{width:100%;background:var(--accent);color:#fff;border:none;border-radius:13px;
+    padding:15px;font-size:16px;font-weight:600;margin-top:6px;}
+  .primary:disabled{opacity:.5;}
+  .ghost{width:100%;background:transparent;color:var(--ink-soft);border:none;padding:12px;
+    font-size:14px;margin-top:4px;}
+
+  /* expense rows */
+  .rows{margin:2px 0 8px;}
+  .row{display:flex;align-items:center;gap:10px;padding:11px 2px;border-bottom:1px solid var(--line-soft);}
+  .row:last-child{border-bottom:none;}
+  .row .rl{flex:1;font-size:15px;}
+  .row .rl small{display:block;color:var(--ink-soft);font-size:12px;margin-top:1px;}
+  .row .ra{font-size:15px;color:var(--expense);}
+  .row .del{background:none;border:none;color:var(--ink-soft);font-size:18px;padding:2px 6px;}
+  .dayhead{display:flex;justify-content:space-between;align-items:baseline;
+    margin:16px 0 2px;padding-bottom:6px;border-bottom:2px solid var(--line);}
+  .dayhead .dh{font-family:var(--serif);font-size:16px;font-weight:600;}
+  .dayhead .ds{font-size:14px;color:var(--ink-soft);}
+
+  /* reports */
+  .surplus{background:var(--raised);border:1px solid var(--line);border-radius:16px;
+    padding:16px;margin-bottom:14px;box-shadow:0 1px 3px var(--shadow);}
+  .surplus .big{font-size:34px;margin:2px 0 2px;font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em;}
+  .surplus .row2{display:flex;justify-content:space-between;margin-top:10px;
+    padding-top:10px;border-top:1px solid var(--line-soft);}
+  .surplus .row2 div{text-align:center;flex:1;}
+  .surplus .row2 .l{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);}
+  .surplus .row2 .v{font-size:16px;margin-top:3px;}
+  .seg{display:flex;background:var(--line-soft);border-radius:12px;padding:3px;margin-bottom:14px;}
+  .seg button{flex:1;border:none;background:none;padding:9px 4px;border-radius:9px;
+    font-size:13px;font-weight:600;color:var(--ink-soft);}
+  .seg button.on{background:var(--raised);color:var(--ink);box-shadow:0 1px 2px var(--shadow);}
+
+  /* settings */
+  .card{background:var(--raised);border:1px solid var(--line);border-radius:16px;
+    padding:16px;margin-bottom:14px;}
+  .card h4{margin:0 0 4px;font-family:var(--serif);font-size:17px;font-weight:600;}
+  .card p.hint{margin:0 0 12px;font-size:13px;color:var(--ink-soft);line-height:1.4;}
+  .toggle{display:flex;align-items:center;justify-content:space-between;}
+  .switch{width:52px;height:31px;border-radius:16px;background:var(--line);position:relative;
+    border:none;transition:background .16s;}
+  .switch.on{background:var(--accent);}
+  .switch:after{content:"";position:absolute;top:3px;left:3px;width:25px;height:25px;
+    border-radius:50%;background:#fff;transition:left .16s;box-shadow:0 1px 2px rgba(0,0,0,.3);}
+  .switch.on:after{left:24px;}
+  .reccard{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line-soft);}
+  .reccard:last-of-type{border-bottom:none;}
+  .reccard .rc{flex:1;}
+  .reccard .rc .n{font-size:15px;}
+  .reccard .rc .m{font-size:12px;color:var(--ink-soft);margin-top:1px;}
+  .reccard .ra{font-family:var(--mono);color:var(--expense);font-size:15px;}
+  .danger{color:var(--expense);background:none;border:1px solid var(--expense);
+    border-radius:12px;padding:12px;width:100%;font-size:14px;font-weight:600;}
+  /* export */
+  .exportbtn{width:100%;background:var(--accent-soft);color:var(--accent);
+    border:1px solid var(--accent);border-radius:12px;padding:12px;font-size:14px;
+    font-weight:600;margin:0 0 14px;display:flex;align-items:center;justify-content:center;gap:8px;}
+  .exportbtn span{font-size:16px;line-height:0;}
+  .print-only{display:none;}
+  .phead{margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid var(--ink);}
+  .phead .pbrand{font-family:var(--serif);font-size:24px;font-weight:600;}
+  .phead .pmeta{font-size:12px;color:var(--ink-soft);margin-top:3px;}
+
+  /* when saving / printing: show only the report, force a clean light look */
+  @media print{
+    :root, html[data-theme="dark"]{
+      --paper:#ffffff; --raised:#ffffff; --ink:#1a1a1a; --ink-soft:#555555;
+      --line:#bfbfbf; --line-soft:#dddddd; --accent:#2a4a63; --accent-soft:#eef2f5;
+      --expense:#8a2a1c; --good:#2f5a41; --shadow:transparent;
+    }
+    .top,.monthbar,.seg,.tabs,.fab,.no-print,.scrim,.sheet{display:none !important;}
+    .print-only{display:block !important;}
+    .wrap{max-width:none;padding:0 6px;}
+    .surplus{box-shadow:none;}
+    .row,.dayhead,.surplus{break-inside:avoid;}
+    body{background:#fff;}
+  }
+
+  .empty{text-align:center;padding:38px 20px;color:var(--ink-soft);}
+  .empty .eb{font-size:15px;color:var(--ink);margin-bottom:6px;font-family:var(--serif);}
+  .empty .es{font-size:13px;line-height:1.5;}
+
+  /* onboarding */
+  .onb{min-height:100vh;display:flex;flex-direction:column;justify-content:center;
+    padding:0 26px calc(40px + env(safe-area-inset-bottom));max-width:460px;margin:0 auto;}
+  .onb .bg{font-family:var(--serif);font-size:38px;font-weight:600;margin-bottom:8px;position:relative;padding-bottom:10px;}
+  .onb .bg:after{content:"";position:absolute;left:0;width:56px;height:3px;bottom:0;background:var(--ink);}
+  .onb h1{font-family:var(--serif);font-size:24px;font-weight:600;margin:26px 0 8px;line-height:1.25;}
+  .onb p{color:var(--ink-soft);font-size:15px;line-height:1.5;margin:0 0 22px;}
+</style>
 </head>
 <body>
-  <div id="app">
-    <div id="onboarding" class="hidden">
-      <div class="ob-progress-bar">
-        <div class="ob-progress-fill" id="ob-progress-fill"></div>
-      </div>
-      <div id="ob-screens"></div>
-    </div>
-    <div id="main-app" class="hidden">
-      <div id="screen-home" class="screen"></div>
-      <div id="screen-day" class="screen hidden"></div>
-      <div id="screen-add" class="screen hidden"></div>
-      <div id="screen-insights" class="screen hidden"></div>
-      <div id="screen-goals" class="screen hidden"></div>
-      <div id="screen-loans" class="screen hidden"></div>
-      <div id="screen-settings" class="screen hidden"></div>
-      <div id="screen-monthly" class="screen hidden"></div>
-      <nav id="bottom-nav">
-        <button class="nav-btn active" data-screen="home" onclick="App.navigate('home')">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-          <span>Home</span>
-        </button>
-        <button class="nav-btn" data-screen="insights" onclick="App.navigate('insights')">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-          <span>Insights</span>
-        </button>
-        <button class="nav-btn nav-add-btn" onclick="App.navigate('add')">
-          <div class="nav-add-circle">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          </div>
-        </button>
-        <button class="nav-btn" data-screen="loans" onclick="App.navigate('loans')">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
-          <span>Loans</span>
-        </button>
-        <button class="nav-btn" data-screen="goals" onclick="App.navigate('goals')">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
-          <span>Goals</span>
-        </button>
-      </nav>
-    </div>
-  </div>
-  <script src="js/data.js"></script>
-  <script src="js/insights.js"></script>
-  <script src="js/onboarding.js"></script>
-  <script src="js/app.js"></script>
-  <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/budget-app/sw.js').catch(console.error);
+<div id="app"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- storage ----------
+  var K = {
+    income:"ledger_income", exp:"ledger_expenses", rec:"ledger_recurring",
+    reclog:"ledger_reclog", theme:"ledger_theme", onb:"ledger_onboarded"
+  };
+  function load(key, fallback){
+    try{ var v = localStorage.getItem(key); return v===null ? fallback : JSON.parse(v); }
+    catch(e){ return fallback; }
+  }
+  function save(key, val){ localStorage.setItem(key, JSON.stringify(val)); }
+
+  var state = {
+    income: load(K.income, 0),
+    expenses: load(K.exp, []),
+    recurring: load(K.rec, []),
+    reclog: load(K.reclog, {}),
+    theme: load(K.theme, "light"),
+    onboarded: load(K.onb, false),
+    tab: "calendar",
+    reportView: "day"
+  };
+  var today = new Date();
+  var view = { y: today.getFullYear(), m: today.getMonth() };      // calendar month
+  var rep = { y: today.getFullYear(), m: today.getMonth() };       // report month
+
+  // ---------- helpers ----------
+  function pad(n){ return n<10 ? "0"+n : ""+n; }
+  function ymd(d){ return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
+  function parseYmd(s){ var p=s.split("-"); return new Date(Number(p[0]),Number(p[1])-1,Number(p[2])); }
+  function daysInMonth(y,m){ return new Date(y, m+1, 0).getDate(); }
+  var MON = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  var DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  function monthLabel(y,m){ return MON[m]+" "+y; }
+  function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+
+  function money(n){
+    var v = Number(n)||0; var neg = v<0; v=Math.abs(v);
+    var s = v.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+    return (neg?"-$":"$")+s;
+  }
+  function money0(n){
+    var v = Number(n)||0; var neg = v<0; v=Math.abs(v);
+    var s = v.toLocaleString("en-US",{minimumFractionDigits:0,maximumFractionDigits:0});
+    return (neg?"-$":"$")+s;
+  }
+
+  // ---------- tiny DOM builder (no template literals) ----------
+  function el(tag, props, kids){
+    var node = document.createElement(tag);
+    if(props){
+      for(var k in props){
+        if(!props.hasOwnProperty(k)) continue;
+        var val = props[k];
+        if(val===null||val===undefined||val===false) continue;
+        if(k==="class") node.className = val;
+        else if(k==="text") node.textContent = val;
+        else if(k==="style" && typeof val==="object"){ for(var s in val){ if(val.hasOwnProperty(s)) node.style[s]=val[s]; } }
+        else if(k.slice(0,2)==="on" && typeof val==="function") node.addEventListener(k.slice(2).toLowerCase(), val);
+        else node.setAttribute(k, val);
+      }
     }
-  </script>
+    if(kids!==undefined && kids!==null){
+      if(!Array.isArray(kids)) kids=[kids];
+      for(var i=0;i<kids.length;i++){
+        var c=kids[i];
+        if(c===null||c===undefined||c===false) continue;
+        if(typeof c==="string"||typeof c==="number") node.appendChild(document.createTextNode(String(c)));
+        else node.appendChild(c);
+      }
+    }
+    return node;
+  }
+
+  // ---------- data ops ----------
+  function expensesFor(y,m){
+    var pre = y+"-"+pad(m+1)+"-";
+    return state.expenses.filter(function(e){ return e.date.indexOf(pre)===0; });
+  }
+  function totalFor(y,m){
+    return expensesFor(y,m).reduce(function(a,e){ return a + Number(e.amount); }, 0);
+  }
+  function addExpense(date, label, amount){
+    state.expenses.push({ id:uid(), date:date, label:label, amount:Number(amount) });
+    save(K.exp, state.expenses);
+  }
+  function removeExpense(id){
+    state.expenses = state.expenses.filter(function(e){ return e.id!==id; });
+    save(K.exp, state.expenses);
+  }
+  function addRecurring(day, label, amount){
+    state.recurring.push({ id:uid(), day:Number(day), label:label, amount:Number(amount) });
+    save(K.rec, state.recurring);
+  }
+  function removeRecurring(id){
+    state.recurring = state.recurring.filter(function(r){ return r.id!==id; });
+    save(K.rec, state.recurring);
+  }
+  // which recurring items are due *today* and not yet handled this month
+  function dueRecurring(){
+    var t = new Date();
+    var y=t.getFullYear(), m=t.getMonth(), d=t.getDate();
+    var dim = daysInMonth(y,m);
+    var out=[];
+    state.recurring.forEach(function(r){
+      var eff = r.day > dim ? dim : r.day;              // clamp e.g. 31st in a 30-day month
+      if(eff!==d) return;
+      var key = y+"-"+pad(m+1)+"-"+r.id;
+      if(state.reclog[key]) return;                     // added or skipped already
+      out.push(r);
+    });
+    return out;
+  }
+  function logRecurring(r, action){
+    var t=new Date();
+    var key = t.getFullYear()+"-"+pad(t.getMonth()+1)+"-"+r.id;
+    state.reclog[key]=action; save(K.reclog, state.reclog);
+  }
+
+  // ---------- render root ----------
+  var root = document.getElementById("app");
+  function applyTheme(){ document.documentElement.setAttribute("data-theme", state.theme==="dark"?"dark":"light"); }
+  function clear(n){ while(n.firstChild) n.removeChild(n.firstChild); }
+
+  function render(){
+    applyTheme();
+    clear(root);
+    if(!state.onboarded){ root.appendChild(renderOnboard()); return; }
+    var wrap = el("div",{class:"wrap"});
+    wrap.appendChild(renderHeader());
+    if(state.tab==="calendar") wrap.appendChild(renderCalendar());
+    else if(state.tab==="reports") wrap.appendChild(renderReports());
+    else wrap.appendChild(renderSettings());
+    root.appendChild(wrap);
+    if(state.tab==="calendar") root.appendChild(renderFab());
+    root.appendChild(renderTabs());
+  }
+
+  // ---------- header ----------
+  function renderHeader(){
+    return el("div",{class:"top"},[
+      el("div",{class:"brand"},[ "Ledger", el("small",{text:"Paper & Ink"}) ])
+    ]);
+  }
+
+  // ---------- onboarding ----------
+  function renderOnboard(){
+    var input;
+    var box = el("div",{class:"onb"},[
+      el("div",{class:"bg",text:"Ledger"}),
+      el("h1",{text:"How much do you make a month?"}),
+      el("p",{text:"One number. It's the baseline every monthly surplus is measured against. You can change it anytime in Settings."}),
+      el("div",{class:"field"},[
+        el("div",{class:"amtinput"},[
+          input = el("input",{type:"number",inputmode:"decimal",placeholder:"4000"})
+        ])
+      ]),
+      el("button",{class:"primary",text:"Start", onclick:function(){
+        var v = parseFloat(input.value);
+        if(isNaN(v)||v<0) v=0;
+        state.income = v; state.onboarded = true;
+        save(K.income, v); save(K.onb, true);
+        render();
+      }})
+    ]);
+    setTimeout(function(){ input.focus(); }, 60);
+    return box;
+  }
+
+  // ---------- calendar ----------
+  function renderCalendar(){
+    var frag = document.createDocumentFragment();
+
+    // month nav
+    var bar = el("div",{class:"monthbar"},[
+      el("button",{class:"navbtn",text:"‹",onclick:function(){ stepMonth(view,-1,render); }}),
+      el("h2",{text:monthLabel(view.y,view.m)}),
+      el("button",{class:"navbtn",text:"›",onclick:function(){ stepMonth(view,1,render); }})
+    ]);
+    frag.appendChild(bar);
+
+    // chips: spent + surplus
+    var spent = totalFor(view.y, view.m);
+    var surplus = state.income - spent;
+    frag.appendChild(el("div",{class:"chips"},[
+      el("div",{class:"chip"},[ el("div",{class:"lab",text:"Spent"}), el("div",{class:"val num",text:money0(spent)}) ]),
+      el("div",{class:"chip"},[ el("div",{class:"lab",text:"Surplus"}),
+        el("div",{class:"val num "+(surplus>=0?"pos":"neg"),text:money0(surplus)}) ])
+    ]));
+
+    // recurring due-today banners (only meaningful on the real current month)
+    if(view.y===today.getFullYear() && view.m===today.getMonth()){
+      dueRecurring().forEach(function(r){ frag.appendChild(recurringBanner(r)); });
+    }
+
+    // calendar card
+    var card = el("div",{class:"cal"});
+    var dow = el("div",{class:"dow"});
+    DOW.forEach(function(d){ dow.appendChild(el("span",{text:d})); });
+    card.appendChild(dow);
+
+    var grid = el("div",{class:"grid"});
+    var first = new Date(view.y, view.m, 1).getDay();
+    var dim = daysInMonth(view.y, view.m);
+    var byDay = {};
+    expensesFor(view.y, view.m).forEach(function(e){
+      var day = Number(e.date.split("-")[2]);
+      byDay[day] = (byDay[day]||0) + Number(e.amount);
+    });
+    var i;
+    for(i=0;i<first;i++) grid.appendChild(el("div",{class:"cell empty"}));
+    for(i=1;i<=dim;i++){
+      (function(day){
+        var ds = view.y+"-"+pad(view.m+1)+"-"+pad(day);
+        var isToday = (view.y===today.getFullYear() && view.m===today.getMonth() && day===today.getDate());
+        var spentDay = byDay[day];
+        var cls = "cell on" + (isToday?" today":"") + (spentDay?" has":"");
+        var kids = [ el("div",{class:"d",text:String(day)}) ];
+        if(spentDay) kids.push(el("div",{class:"amt",text:money0(spentDay)}));
+        grid.appendChild(el("button",{class:cls, onclick:function(){ openDay(ds); }}, kids));
+      })(i);
+    }
+    card.appendChild(grid);
+    frag.appendChild(card);
+    return frag;
+  }
+
+  function recurringBanner(r){
+    return el("div",{class:"banner"},[
+      el("div",{class:"bl",text:"Recurring · due today"}),
+      el("div",{class:"bt"},[ r.label+" — ", el("b",{text:money(r.amount)}) ]),
+      el("div",{class:"acts"},[
+        el("button",{class:"add",text:"Add it", onclick:function(){
+          addExpense(ymd(new Date()), r.label, r.amount);
+          logRecurring(r,"added"); render();
+        }}),
+        el("button",{class:"skip",text:"Not this month", onclick:function(){
+          logRecurring(r,"skipped"); render();
+        }})
+      ])
+    ]);
+  }
+
+  function stepMonth(obj, dir, cb){
+    obj.m += dir;
+    if(obj.m<0){ obj.m=11; obj.y--; }
+    else if(obj.m>11){ obj.m=0; obj.y++; }
+    cb();
+  }
+
+  // ---------- fab + add ----------
+  function renderFab(){
+    return el("button",{class:"fab", onclick:function(){ openDay(ymd(new Date())); }},[
+      el("span",{text:"+"}), "Add expense"
+    ]);
+  }
+
+  // ---------- tabs ----------
+  function renderTabs(){
+    function tab(id,label,icon){
+      return el("button",{class:(state.tab===id?"active":""), onclick:function(){ state.tab=id; render(); }},[
+        el("div",{class:"ic",text:icon}), label
+      ]);
+    }
+    return el("div",{class:"tabs"},[
+      tab("calendar","Calendar","▦"),
+      tab("reports","Reports","▤"),
+      tab("settings","Settings","⚙")
+    ]);
+  }
+
+  // ---------- sheet plumbing ----------
+  function openSheet(buildContent){
+    var scrim = el("div",{class:"scrim", onclick:closeSheet});
+    var sheet = el("div",{class:"sheet"});
+    sheet.appendChild(el("div",{class:"grab"}));
+    buildContent(sheet);
+    document.body.appendChild(scrim);
+    document.body.appendChild(sheet);
+    requestAnimationFrame(function(){ scrim.classList.add("show"); sheet.classList.add("show"); });
+    root._scrim = scrim; root._sheet = sheet;
+  }
+  function closeSheet(){
+    var scrim=root._scrim, sheet=root._sheet;
+    if(!sheet) return;
+    scrim.classList.remove("show"); sheet.classList.remove("show");
+    setTimeout(function(){
+      if(scrim.parentNode) scrim.parentNode.removeChild(scrim);
+      if(sheet.parentNode) sheet.parentNode.removeChild(sheet);
+    }, 220);
+    root._scrim=null; root._sheet=null;
+  }
+
+  function openDay(dateStr){
+    openSheet(function(sheet){
+      var d = parseYmd(dateStr);
+      var head = DOW[d.getDay()]+", "+MON[d.getMonth()]+" "+d.getDate();
+      sheet.appendChild(el("h3",{text:head}));
+
+      // existing expenses that day
+      var items = state.expenses.filter(function(e){ return e.date===dateStr; });
+      var rows = el("div",{class:"rows"});
+      if(items.length===0){
+        rows.appendChild(el("div",{class:"empty",style:{padding:"14px 0 4px"}},[
+          el("div",{class:"es",text:"Nothing logged yet for this day."})
+        ]));
+      } else {
+        items.forEach(function(e){
+          rows.appendChild(el("div",{class:"row"},[
+            el("div",{class:"rl",text:e.label||"Expense"}),
+            el("div",{class:"ra num",text:money(e.amount)}),
+            el("button",{class:"del",text:"✕", onclick:function(){
+              removeExpense(e.id); closeSheet(); render(); openDay(dateStr);
+            }})
+          ]));
+        });
+      }
+      sheet.appendChild(rows);
+
+      // add form
+      var whatI, amtI, repI;
+      sheet.appendChild(el("div",{class:"field"},[
+        el("label",{text:"What was it?"}),
+        whatI = el("input",{type:"text",placeholder:"Rent, groceries, coffee…",autocomplete:"off"})
+      ]));
+      sheet.appendChild(el("div",{class:"field"},[
+        el("label",{text:"How much?"}),
+        el("div",{class:"amtinput"},[
+          amtI = el("input",{type:"number",inputmode:"decimal",placeholder:"0.00"})
+        ])
+      ]));
+      sheet.appendChild(el("label",{class:"check"},[
+        repI = el("input",{type:"checkbox"}),
+        el("div",{},[
+          el("div",{class:"ct",text:"Repeats monthly on this day"}),
+          el("div",{class:"cs",text:"You'll get a reminder to add it each month — never logged without your say-so."})
+        ])
+      ]));
+      sheet.appendChild(el("button",{class:"primary",text:"Add to this day", onclick:function(){
+        var label = whatI.value.trim() || "Expense";
+        var amt = parseFloat(amtI.value);
+        if(isNaN(amt)||amt<=0){ amtI.focus(); return; }
+        addExpense(dateStr, label, amt);
+        if(repI.checked){
+          var day = Number(dateStr.split("-")[2]);
+          addRecurring(day, label, amt);
+          // mark this month handled so it doesn't immediately re-prompt today
+          var mk = dateStr.slice(0,7)+"-"+state.recurring[state.recurring.length-1].id;
+          state.reclog[mk]="added"; save(K.reclog, state.reclog);
+        }
+        closeSheet(); render();
+      }}));
+      sheet.appendChild(el("button",{class:"ghost",text:"Done", onclick:closeSheet}));
+      setTimeout(function(){ whatI.focus(); }, 260);
+    });
+  }
+
+  // ---------- reports ----------
+  function renderReports(){
+    var frag = document.createDocumentFragment();
+
+    // month nav (screen only — hidden when saving)
+    frag.appendChild(el("div",{class:"monthbar no-print"},[
+      el("button",{class:"navbtn",text:"‹",onclick:function(){ stepMonth(rep,-1,render); }}),
+      el("h2",{text:monthLabel(rep.y,rep.m)}),
+      el("button",{class:"navbtn",text:"›",onclick:function(){ stepMonth(rep,1,render); }})
+    ]));
+
+    var items = expensesFor(rep.y, rep.m);
+    var spent = items.reduce(function(a,e){ return a+Number(e.amount); }, 0);
+    var surplus = state.income - spent;
+
+    // segmented control (screen only)
+    function seg(id,label){
+      return el("button",{class:(state.reportView===id?"on":""), onclick:function(){ state.reportView=id; render(); }},label);
+    }
+    frag.appendChild(el("div",{class:"seg no-print"},[
+      seg("day","By day"), seg("week","By week"), seg("expensive","Most expensive")
+    ]));
+
+    // save / share button (screen only) — hands off to the iPhone share sheet
+    if(items.length>0){
+      frag.appendChild(el("button",{class:"exportbtn no-print", onclick:saveReport},[
+        el("span",{text:"⬇"}), "Save or share this report"
+      ]));
+    }
+
+    // ---- the printable report itself ----
+    var report = el("div",{id:"report"});
+
+    // print-only masthead (hidden on screen, appears when saving)
+    var when = new Date();
+    report.appendChild(el("div",{class:"print-only phead"},[
+      el("div",{class:"pbrand",text:"Ledger"}),
+      el("div",{class:"pmeta",text:monthLabel(rep.y,rep.m)+"  ·  generated "+MON[when.getMonth()].slice(0,3)+" "+when.getDate()+", "+when.getFullYear()})
+    ]));
+
+    // surplus card
+    report.appendChild(el("div",{class:"surplus"},[
+      el("div",{class:"lab",style:{fontSize:"11px",fontWeight:"600",letterSpacing:".08em",textTransform:"uppercase",color:"var(--ink-soft)"},text:"Surplus this month"}),
+      el("div",{class:"big",style:{color:(surplus>=0?"var(--good)":"var(--expense)")},text:money(surplus)}),
+      el("div",{class:"row2"},[
+        el("div",{},[ el("div",{class:"l",text:"Income"}), el("div",{class:"v num",text:money0(state.income)}) ]),
+        el("div",{},[ el("div",{class:"l",text:"Spent"}), el("div",{class:"v num",text:money0(spent)}) ]),
+        el("div",{},[ el("div",{class:"l",text:"Logged"}), el("div",{class:"v num",text:String(items.length)}) ])
+      ])
+    ]));
+
+    if(items.length===0){
+      report.appendChild(el("div",{class:"empty"},[
+        el("div",{class:"eb",text:"No expenses this month"}),
+        el("div",{class:"es",text:"Log something and it shows up here — by day, by week, and by biggest first. Then you can save or screenshot it."})
+      ]));
+      frag.appendChild(report);
+      return frag;
+    }
+
+    if(state.reportView==="day") report.appendChild(reportByDay(items));
+    else if(state.reportView==="week") report.appendChild(reportByWeek(items));
+    else report.appendChild(reportExpensive(items));
+
+    frag.appendChild(report);
+    return frag;
+  }
+
+  // Save/share: opens the OS print/share sheet. On iPhone that's where
+  // "Save to Files" (PDF), Photos, and AirDrop live. Nothing is stored in the app.
+  function saveReport(){
+    if(window.print) window.print();
+  }
+
+  function rowLine(label, sub, amount){
+    var left = [ el("span",{text:label}) ];
+    if(sub) left.push(el("small",{text:sub}));
+    return el("div",{class:"row"},[
+      el("div",{class:"rl"}, left),
+      el("div",{class:"ra num",text:money(amount)})
+    ]);
+  }
+
+  function reportByDay(items){
+    var box = el("div",{});
+    var groups = {};
+    items.forEach(function(e){ (groups[e.date]=groups[e.date]||[]).push(e); });
+    Object.keys(groups).sort().forEach(function(date){
+      var list = groups[date];
+      var sub = list.reduce(function(a,e){ return a+Number(e.amount); },0);
+      var d = parseYmd(date);
+      box.appendChild(el("div",{class:"dayhead"},[
+        el("div",{class:"dh",text:DOW[d.getDay()]+", "+MON[d.getMonth()]+" "+d.getDate()}),
+        el("div",{class:"ds num",text:money(sub)})
+      ]));
+      list.forEach(function(e){ box.appendChild(rowLine(e.label||"Expense", null, e.amount)); });
+    });
+    return box;
+  }
+
+  function reportByWeek(items){
+    var box = el("div",{});
+    var groups = {};
+    items.forEach(function(e){
+      var d = parseYmd(e.date);
+      var sun = new Date(d); sun.setDate(d.getDate()-d.getDay());   // Sunday of that week
+      var key = ymd(sun);
+      (groups[key]=groups[key]||[]).push(e);
+    });
+    Object.keys(groups).sort().forEach(function(key){
+      var list = groups[key];
+      var sub = list.reduce(function(a,e){ return a+Number(e.amount); },0);
+      var start = parseYmd(key); var end = new Date(start); end.setDate(start.getDate()+6);
+      var label = MON[start.getMonth()].slice(0,3)+" "+start.getDate()+" – "+MON[end.getMonth()].slice(0,3)+" "+end.getDate();
+      box.appendChild(el("div",{class:"dayhead"},[
+        el("div",{class:"dh",text:label}),
+        el("div",{class:"ds num",text:money(sub)})
+      ]));
+      list.sort(function(a,b){ return a.date<b.date?-1:1; });
+      list.forEach(function(e){
+        var d=parseYmd(e.date);
+        box.appendChild(rowLine(e.label||"Expense", DOW[d.getDay()]+" "+d.getDate(), e.amount));
+      });
+    });
+    return box;
+  }
+
+  function reportExpensive(items){
+    var box = el("div",{});
+    box.appendChild(el("div",{class:"dayhead"},[
+      el("div",{class:"dh",text:"Biggest first"}),
+      el("div",{class:"ds",text:String(items.length)+" items"})
+    ]));
+    var sorted = items.slice().sort(function(a,b){ return Number(b.amount)-Number(a.amount); });
+    sorted.forEach(function(e){
+      var d=parseYmd(e.date);
+      box.appendChild(rowLine(e.label||"Expense", MON[d.getMonth()].slice(0,3)+" "+d.getDate(), e.amount));
+    });
+    return box;
+  }
+
+  // ---------- settings ----------
+  function renderSettings(){
+    var frag = document.createDocumentFragment();
+    frag.appendChild(el("div",{style:{height:"6px"}}));
+
+    // income
+    var incI;
+    frag.appendChild(el("div",{class:"card"},[
+      el("h4",{text:"Monthly income"}),
+      el("p",{class:"hint",text:"The baseline your surplus is measured against."}),
+      el("div",{class:"field",style:{marginBottom:"10px"}},[
+        el("div",{class:"amtinput"},[
+          incI = el("input",{type:"number",inputmode:"decimal",value:String(state.income)})
+        ])
+      ]),
+      el("button",{class:"primary",text:"Save income", onclick:function(){
+        var v=parseFloat(incI.value); if(isNaN(v)||v<0) v=0;
+        state.income=v; save(K.income,v); render();
+      }})
+    ]));
+
+    // recurring
+    var recCard = el("div",{class:"card"});
+    recCard.appendChild(el("h4",{text:"Recurring expenses"}));
+    recCard.appendChild(el("p",{class:"hint",text:"On its day each month, Ledger reminds you to add it. Nothing is logged automatically."}));
+    if(state.recurring.length===0){
+      recCard.appendChild(el("div",{class:"es",style:{color:"var(--ink-soft)",fontSize:"13px",paddingBottom:"12px"},text:"None yet. Tick “Repeats monthly” when adding an expense, or add one below."}));
+    } else {
+      state.recurring.slice().sort(function(a,b){return a.day-b.day;}).forEach(function(r){
+        recCard.appendChild(el("div",{class:"reccard"},[
+          el("div",{class:"rc"},[
+            el("div",{class:"n",text:r.label}),
+            el("div",{class:"m",text:"Day "+r.day+" of each month"})
+          ]),
+          el("div",{class:"ra",text:money(r.amount)}),
+          el("button",{class:"del",style:{background:"none",border:"none",color:"var(--ink-soft)",fontSize:"18px",padding:"2px 6px"},text:"✕",
+            onclick:function(){ removeRecurring(r.id); render(); }})
+        ]));
+      });
+    }
+    // add recurring
+    var rLabel,rAmt,rDay;
+    recCard.appendChild(el("div",{style:{marginTop:"14px",paddingTop:"14px",borderTop:"1px solid var(--line-soft)"}},[
+      el("div",{class:"field"},[ el("label",{text:"Name"}), rLabel=el("input",{type:"text",placeholder:"Rent",autocomplete:"off"}) ]),
+      el("div",{class:"field"},[ el("label",{text:"Amount"}),
+        el("div",{class:"amtinput"},[ rAmt=el("input",{type:"number",inputmode:"decimal",placeholder:"0.00"}) ]) ]),
+      el("div",{class:"field"},[ el("label",{text:"Day of month (1–31)"}),
+        rDay=el("input",{type:"number",inputmode:"numeric",placeholder:"1",min:"1",max:"31"}) ]),
+      el("button",{class:"primary",text:"Add recurring", onclick:function(){
+        var lab=rLabel.value.trim(); var amt=parseFloat(rAmt.value); var day=parseInt(rDay.value,10);
+        if(!lab||isNaN(amt)||amt<=0||isNaN(day)||day<1||day>31){ return; }
+        addRecurring(day, lab, amt); render();
+      }})
+    ]));
+    frag.appendChild(recCard);
+
+    // appearance
+    frag.appendChild(el("div",{class:"card"},[
+      el("div",{class:"toggle"},[
+        el("div",{},[ el("h4",{text:"Dark mode",style:{margin:"0"}}) ]),
+        el("button",{class:"switch"+(state.theme==="dark"?" on":""), onclick:function(){
+          state.theme = state.theme==="dark"?"light":"dark"; save(K.theme, state.theme); render();
+        }})
+      ])
+    ]));
+
+    // reset
+    frag.appendChild(el("div",{class:"card"},[
+      el("h4",{text:"Reset"}),
+      el("p",{class:"hint",text:"Clears every expense, recurring item, and your income. This can't be undone."}),
+      el("button",{class:"danger",text:"Erase all data", onclick:function(){
+        if(confirm("Erase all Ledger data on this device? This can't be undone.")){
+          [K.income,K.exp,K.rec,K.reclog,K.onb].forEach(function(k){ localStorage.removeItem(k); });
+          state.income=0; state.expenses=[]; state.recurring=[]; state.reclog={}; state.onboarded=false;
+          render();
+        }
+      }})
+    ]));
+
+    return frag;
+  }
+
+  // ---------- boot ----------
+  applyTheme();
+  render();
+
+  if("serviceWorker" in navigator){
+    window.addEventListener("load", function(){
+      navigator.serviceWorker.register("./sw.js").catch(function(){});
+    });
+  }
+})();
+</script>
 </body>
 </html>
